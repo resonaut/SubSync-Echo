@@ -414,12 +414,67 @@ jobs:
             !e2e-data/work/watch/library/**/*.mov
             e2e-data/temp/*/subsync-transcripts
 
-  release:
-    # version tags publish both builds on one release page, after both pass
-    # the end-to-end test
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [ windows, linux, e2e-windows, e2e-linux ]
+  # the Docker image for home servers (docker/Dockerfile), made from the Linux
+  # package: built and checked on every build; on version tags and manual runs
+  # the watch mode end-to-end test also runs inside it
+  docker:
+    needs: linux
     runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: subsync-linux-x86_64
+          path: download
+
+      - name: Build image
+        run: |
+          cp download/*.tar.xz docker/subsync-linux-x86_64.tar.xz
+          docker build -t subsync-echo:test docker
+          docker image ls subsync-echo:test
+
+      # the image must load Whisper and translation itself, as the package does
+      - name: Test image
+        run: |
+          docker run --rm subsync-echo:test --version | tee version.txt
+          grep -q 'speech recognition (Whisper): available$' version.txt
+          grep -q 'translation: available$' version.txt
+
+      - uses: actions/cache@v4
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        with:
+          path: |
+            e2e-data/tears-of-steel
+            ~/.cache/huggingface
+          key: e2e-tears-of-steel-${{ runner.os }}-v2
+
+      # the same test as on the packages, with the app in the container: the
+      # work folder is mounted at the same path, the models from the cache
+      - name: Watch mode in the container
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        run: |
+          mkdir -p ~/.cache/huggingface
+          python3 tests/run_all.py e2e --films watch --app "docker run --rm --user $(id -u):$(id -g) -v $PWD:$PWD -v $HOME/.cache/huggingface:/config/.cache/huggingface subsync-echo:test"
+
+      - uses: actions/upload-artifact@v4
+        if: always() && (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch')
+        with:
+          name: e2e-docker
+          path: |
+            e2e-data/work/watch
+            !e2e-data/work/watch/library/**/*.mov
+
+  release:
+    # version tags publish both builds on one release page, and the Docker
+    # image, after all of them pass the end-to-end tests
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [ windows, linux, e2e-windows, e2e-linux, docker ]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      packages: write
     steps:
       - uses: actions/checkout@v4
 
@@ -438,3 +493,15 @@ jobs:
           (cd files && sha256sum * > SHA256SUMS && cat SHA256SUMS)
           python3 .github/release_notes.py "$TAG" release-notes.md
           gh release create "$TAG" files/* --title "SubSync Echo $TAG" --notes-file release-notes.md
+
+      # the image the docker job tested, made again from the same package
+      - name: Publish Docker image
+        env:
+          TAG: ${{ github.ref_name }}
+          IMAGE: ghcr.io/resonaut/subsync-echo
+        run: |
+          cp files/*-linux-x86_64.tar.xz docker/subsync-linux-x86_64.tar.xz
+          docker build -t "$IMAGE:$TAG" -t "$IMAGE:latest" docker
+          echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker push "$IMAGE:$TAG"
+          docker push "$IMAGE:latest"

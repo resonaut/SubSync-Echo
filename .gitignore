@@ -42,3 +42,5 @@ CppCheckResults.xml
 # test material: subtitles and transcripts of local movies, not for publishing
 /test-data
 /e2e-data
+# the Linux package copied in to build the Docker image
+docker/*.tar.xz

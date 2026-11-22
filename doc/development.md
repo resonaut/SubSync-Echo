@@ -93,7 +93,7 @@ Windows and Linux packages are built by GitHub Actions; see [.github/workflows/b
 2. See the release page before tagging: `python .github/release_notes.py 0.21` prints it.
 3. Push a version tag such as `0.21`.
 
-The tag builds the packages, runs the end-to-end tests on both and publishes a release only when they pass. Its page ([.github/release-notes.md](../.github/release-notes.md)) shows the version's highlights and links to its whole section of the changelog for everything else. A tag without a changelog section, or a section without highlights, stops before building.
+The tag builds the packages and the Docker image ([docker/Dockerfile](../docker/Dockerfile), made from the Linux package), runs the end-to-end tests on both packages and the watch mode test inside the image, and publishes a release and the image (`ghcr.io/resonaut/subsync-echo`, tagged with the version and `latest`) only when they pass. Its page ([.github/release-notes.md](../.github/release-notes.md)) shows the version's highlights and links to its whole section of the changelog for everything else. A tag without a changelog section, or a section without highlights, stops before building.
 
 ## The icon
 

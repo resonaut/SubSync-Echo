@@ -7,7 +7,7 @@ If you run a media server such as Jellyfin, Plex or Emby, SubSync Echo can sync 
 - **Watch mode** keeps an eye on your media folders and syncs every new subtitle placed next to its video.
 - **Bazarr** users can have Bazarr run SubSync Echo right after each subtitle it downloads.
 
-Both use the command line version, `subsync-cmd`, which needs no screen. Today it runs on 64-bit Windows and on Linux on x86-64 (the release's `.tar.xz`). *A build for ARM computers (Raspberry Pi and similar) and a Docker image are planned, not built yet.*
+Both use the command line version, `subsync-cmd`, which needs no screen. It runs on 64-bit Windows and on Linux on x86-64 (the release's `.tar.xz`), and from 0.21 also as a [Docker image](#docker) for x86-64. *A build for ARM computers (Raspberry Pi and similar) is planned, not built yet.*
 
 ## Watch mode
 
@@ -71,6 +71,42 @@ WantedBy=multi-user.target
 ```
 
 Then `sudo systemctl enable --now subsync-watch`. The user needs write access to the media folders, since synced subtitles replace the originals. `Nice=10` keeps syncing from slowing down your media server while it plays.
+
+## Docker
+
+From 0.21, SubSync Echo comes as a Docker image for x86-64 computers: `ghcr.io/resonaut/subsync-echo`. It holds the same app as the Linux download, without the window, and runs watch mode on the folder `/media` inside it.
+
+```
+docker run -d --name subsync-echo --restart unless-stopped   --user 1000:1000   -v /srv/media:/media   -v /srv/subsync-config:/config   ghcr.io/resonaut/subsync-echo:latest
+```
+
+- **`/media`**: your media folder, with its subfolders. The subtitles are synced in place there, so it can't be mounted read-only.
+- **`/config`**: SubSync's settings, the watch state file and the models it downloads the first time (about 980 MB). Keep it, so the models aren't downloaded again and nothing is synced twice when the container is replaced.
+- **`--user`**: the user and group that own your media, so synced subtitles belong to them (`id` on the server shows yours). Without it, the image runs as 1000:1000.
+- `docker logs subsync-echo` shows what it does. `docker stop` stops it between subtitles, or stops the sync in progress and leaves that subtitle as it was.
+
+With Docker Compose:
+
+```yaml
+services:
+  subsync-echo:
+    image: ghcr.io/resonaut/subsync-echo:latest
+    user: "1000:1000"
+    volumes:
+      - /srv/media:/media
+      - /srv/subsync-config:/config
+    restart: unless-stopped
+```
+
+Watch mode's options go after the image name, replacing the default command. For example, to watch two folders and sync the subtitles already there too:
+
+```
+docker run -d --name subsync-echo --user 1000:1000   -v /srv/movies:/movies -v /srv/tv:/tv -v /srv/subsync-config:/config   ghcr.io/resonaut/subsync-echo:latest   --cli watch --dir /movies --dir /tv --state /config/watch-state.json --existing
+```
+
+To sync a single file: `docker run --rm --user 1000:1000 -v /srv/media:/media -v /srv/subsync-config:/config ghcr.io/resonaut/subsync-echo --cli sync --sub "/media/Movie.en.srt" --ref "/media/Movie.mkv" --ref-stream-by-type audio --out "/media/Movie.en.srt" --overwrite`.
+
+Each release's image is tagged with its version (`0.21`) and `latest`. Every image is tested before it's published: the watch mode end-to-end test (see [development.md](development.md)) runs with the app inside it.
 
 ## Bazarr
 

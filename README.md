@@ -87,7 +87,7 @@ No graphics card: it runs on the processor. The times above were measured on a l
 <details>
 <summary><b>Can it sync subtitles on my media server (Jellyfin, Plex, Emby) automatically?</b></summary>
 
-Yes, from 0.21: **watch mode** syncs each new subtitle placed next to its video, and **Bazarr** can run SubSync Echo after each download. See [doc/home-server.md](doc/home-server.md). *A build for ARM computers such as the Raspberry Pi and a Docker image are planned, not built yet.*
+Yes, from 0.21: **watch mode** syncs each new subtitle placed next to its video, and **Bazarr** can run SubSync Echo after each download. It also comes as a Docker image. See [doc/home-server.md](doc/home-server.md). *A build for ARM computers such as the Raspberry Pi is planned, not built yet.*
 
 </details>
 
