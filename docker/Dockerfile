@@ -13,9 +13,13 @@ LABEL org.opencontainers.image.title="SubSync Echo" \
       org.opencontainers.image.documentation="https://github.com/resonaut/SubSync-Echo/blob/master/doc/home-server.md" \
       org.opencontainers.image.licenses="GPL-3.0-only"
 
-# certificates for downloading the models the first time
+# certificates for downloading the models the first time, and the system
+# libraries the package needs but doesn't carry (PyInstaller leaves them out):
+# FFmpeg and the libraries it links to load libdrm, xcb and Wayland as soon as
+# the engine starts, even without a screen
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
+        libdrm2 libxcb1 libwayland-client0 libwayland-cursor0 libwayland-egl1 libwayland-server0 \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /config /media \
     && chmod 777 /config
