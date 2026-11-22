@@ -53,7 +53,7 @@ Before the speech check, one of these films (Cars) had only 65% of lines within 
 | Test | Result |
 |---|---|
 | Tears of Steel converted to a variable frame rate (24, 12 and 16 frames per second in turn), English and Spanish | **all lines within 0.2 s** |
-| Sintel, a free 15-minute film with only 26 subtitle lines and much music, 6 subtitle languages | **no file saved**: too little speech to confirm a timing |
+| Sintel, a free 15-minute film with only 26 subtitle lines and much music, 6 subtitle languages | French, Russian, Chinese: **all lines within 0.2 s**; Dutch, Czech: **all spoken lines within 0.2 s** (the other line is broken in the Dutch file, a translator credit in the Czech one); Japanese: no file saved |
 
 Anyone can repeat these tests: see [Building, testing and releasing](development.md).
 

@@ -207,6 +207,8 @@ class Synchronizer(object):
             stats = self.stats
         if not stats.correlated:
             logger.info('after %i transcript chunks: not correlated yet', chunksDone)
+            if chunksDone >= pipe.chunksNo:
+                return self._sparseSync(pipe)
             return False
 
         speech = transcribe.loadSpeech(pipe.cacheDir)
@@ -248,6 +250,56 @@ class Synchronizer(object):
             self.refinedFormula = gizmo.Line(res[0], res[1] + shift)
         logger.info('after %i transcript chunks: %s confirmed by speech, polished to %s',
                 chunksDone, stats.formula, self.refinedFormula)
+        return 'confirmed'
+
+    def _sparseSync(self, pipe):
+        ''' Films with very little dialogue: the whole audio is transcribed
+        and too few words matched to correlate. Subtitle lines are paired
+        with transcript lines saying the same, those are transcribed again
+        with word times, and the lines give the formula (see
+        transcribe.sparseFit and sparseMaxLines). '''
+        with self.subtitlesCollector.subtitlesLock:
+            subs = sorted((e.start / 1000.0, e.end / 1000.0, self._matchText(e.start, e.text))
+                    for e in self.subtitlesCollector.getSubtitles().events)
+        if not subs or len(subs) > transcribe.sparseMaxLines:
+            return False
+
+        lines = []
+        for no in pipe.chunksDoneList:
+            lines += transcribe.readChunk(transcribe.getChunkPath(pipe.cacheDir, no))
+        lines.sort()
+        paired = [ lines[j] for _i, j in transcribe.pairLines(subs, lines, ngrams=self.ngrams) ]
+        logger.info('sparse dialogue: %i subtitle lines, %i transcript lines, %i paired',
+                len(subs), len(lines), len(paired))
+        if len(paired) < transcribe.sparseMinPaired:
+            return False
+        # Whisper words lines differently with word times, which pairs more of
+        # them: all are timed again, unless that is much audio
+        windows = transcribe.sparseWindows(lines, pipe.duration)
+        if sum(e - s for s, e in windows) > transcribe.sparseMaxAudio:
+            windows = transcribe.sparseWindows(paired, pipe.duration)
+
+        pipe._status(_('Little dialogue, timing the lines by their words...'))
+        try:
+            words = transcribe.getWordLines(self.ref.path, pipe.cacheDir, self.ref.no,
+                    pipe.stream.lang, windows,
+                    translate=pipe.translate, channels=pipe.channels, runCb=pipe._isRunning)
+        except transcribe.Terminated:
+            return False
+        except Exception as err:
+            logger.warning('transcription with word times failed: %r', err, exc_info=True)
+            return False
+
+        res = transcribe.sparseFit(subs, words, ngrams=self.ngrams)
+        if res is None:
+            return False
+        a, b, agree = res
+        shift = transcribe.sparseShift(agree, transcribe.loadSpeech(pipe.cacheDir),
+                self._leadTarget())
+        with self.statsLock:
+            self.refinedFormula = gizmo.Line(a, b + shift)
+        logger.info('sparse dialogue: synchronized by %i lines, %s', len(agree),
+                self.refinedFormula)
         return 'confirmed'
 
     def polishWithSpeech(self, runCb=None):

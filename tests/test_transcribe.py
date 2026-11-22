@@ -343,6 +343,86 @@ class LeadTest(FilmTest):
         self.assertEqual(self.shift(t.leadTarget + t.leadMaxShift + 0.15), 0.0)
 
 
+class SparseDialogueTest(unittest.TestCase):
+    """Films with very little dialogue, like Sintel: 26 lines in three
+    groups, synchronized from whole lines (see sparseFit)."""
+
+    TEXTS = [ 'This blade has a dark past', 'It has shed much innocent blood',
+              'You are a fool for traveling alone', 'You are lucky your blood still flows',
+              'Thank you', 'So what brings you here', 'To the land of the gatekeepers',
+              'I am searching for someone', 'Someone very dear, a kindred spirit',
+              'A dragon', 'A dangerous quest for a lone hunter',
+              'I have been alone for as long as I can remember',
+              'It is almost over, hold still', 'Good night little Scales',
+              'Catch him, quickly', 'Where are you hiding', 'Scales come back',
+              'Bring the dragon home', 'Scales where are you', 'I have failed',
+              'You have only failed to see', 'These are dragon lands Sintel',
+              'You are closer than you know', 'Scales is that you', 'Forgive me Scales',
+              'Goodbye little dragon' ]
+    STARTS = [ 107.25, 111.8, 118.0, 121.75, 125.25, 127.5, 129.4, 135.0, 138.0, 143.4,
+               148.85, 152.95, 207.25, 228.25, 250.35, 265.25, 304.0, 338.75, 360.0,
+               445.85, 452.8, 457.8, 460.85, 557.6, 621.6, 626.2 ]
+    HEARD = [ 2, 3, 4, 5, 7, 8, 9, 11, 13, 19, 20, 21, 22 ]   # lines Whisper writes down
+
+    def film(self, early=0.35, outlier=21):
+        """Subtitle lines and word-timed transcript lines of the film: words
+        start `early` seconds before the subtitle line, one line far off."""
+        subs = [ (s, s + 2.5, text) for s, text in zip(self.STARTS, self.TEXTS) ]
+        rnd = random.Random(5)
+        lines = []
+        for no in self.HEARD:
+            start = self.STARTS[no] - early + rnd.uniform(-0.3, 0.3)
+            if no == outlier:
+                start -= 3.9
+            lines.append((start, start + 2.0, self.TEXTS[no]))
+        return subs, lines
+
+    def test_lines_paired_in_order(self):
+        subs, lines = self.film()
+        pairs = t.pairLines(subs, lines)
+        self.assertEqual([ i for i, _j in pairs ], self.HEARD)
+        self.assertEqual([ j for _i, j in pairs ], list(range(len(self.HEARD))))
+
+    def test_speed_and_offset_found(self):
+        subs, lines = self.film()
+        res = t.sparseFit(mistime(subs, 25 / 24, 2.5), lines)
+        self.assertIsNotNone(res)
+        a, b, agree = res
+        self.assertAlmostEqual(a, 25 / 24, places=6)
+        self.assertEqual(len(agree), len(self.HEARD) - 1, 'the line far off is left out')
+        for (s, _e, _x), (m, _e2, _x2) in zip(subs, mistime(subs, 25 / 24, 2.5)):
+            self.assertLess(abs(a * m + b - (s - 0.35)), 0.3)
+
+    def test_subtitles_of_another_film_refused(self):
+        _subs, lines = self.film()
+        rnd = random.Random(3)
+        other = [ (s, s + 2.0, reword(x, rnd) + ' ' + ''.join(rnd.choice('xyzq') for _ in range(9)))
+                  for s, x in zip(self.STARTS, reversed(self.TEXTS)) ]
+        self.assertIsNone(t.sparseFit(other, lines))
+
+    def test_lines_close_together_refused(self):
+        subs, lines = self.film()
+        heard = set(range(8))                   # only the first minute
+        lines = [ l for no, l in zip(self.HEARD, lines) if no in heard ]
+        self.assertIsNone(t.sparseFit(subs, lines), 'speed is not pinned by 40 s of lines')
+
+    def test_too_few_lines_refused(self):
+        subs, lines = self.film()
+        self.assertIsNone(t.sparseFit(subs, lines[:2] + lines[-2:]))
+
+    def test_lead_measured_from_speech(self):
+        agree = [ (s, s - 0.35) for s in self.STARTS[:6] ]
+        speech = [ (w + 0.4, w + 2.0) for _s, w in agree ]
+        self.assertAlmostEqual(t.sparseShift(agree, speech, 0.15), 0.25)
+        self.assertAlmostEqual(t.sparseShift(agree, speech[:2], 0.15), -0.15,
+                msg='too few speech starts: lines start target before the words')
+
+    def test_windows_joined(self):
+        lines = [ (10.0, 12.0, 'a'), (14.0, 15.0, 'b'), (40.0, 41.0, 'c'), (1.0, 2.0, 'd') ]   # d's range ends at 5 s, a's starts at 7 s
+        self.assertEqual(t.sparseWindows(lines, duration=42.5),
+                [ (0.0, 5.0), (7.0, 18.0), (37.0, 42.5) ])
+
+
 class LanguageTest(unittest.TestCase):
     def test_supports(self):
         self.assertTrue(t.supports('jpn'))

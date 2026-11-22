@@ -168,6 +168,35 @@ leadClear = 0.4
 leadMinLines = 30
 leadMaxShift = 0.3
 
+# films with very little dialogue (Sintel: 26 lines in 15 minutes, much music)
+# give the correlator too few matched words (minPointsNo) and speech detection
+# too little speech to confirm anything. When every chunk is transcribed and
+# nothing correlated, subtitles of at most sparseMaxLines lines are
+# synchronized from whole lines instead (see sparseFit): subtitle lines are
+# paired with transcript lines saying the same, in order of both, and the
+# speed must be one of frameRatios. Whisper's line times are seconds off in
+# such films (its speech filter joins music to the lines), so speech around
+# the paired lines is transcribed again with word times first, sparseMargin
+# seconds around each (see getWordLines); the first, rougher transcript must
+# pair at least sparseMinPaired lines, and every transcript line is timed
+# again when that is at most sparseMaxAudio seconds of audio. The result is
+# accepted when at least sparseMinLines pairs agree within sparseTolerance
+# seconds, they are at least sparseMinShare of all pairs and span
+# sparseMinSpan seconds, and no other
+# speed and offset fitting as many pairs would move a line by more than
+# 2 * sparseTolerance. Longer subtitles never take this way.
+sparseMaxLines = 300
+sparseMinSim = 0.34     # share of the shorter line's words found in the other
+sparseWordLen = 4       # shortest word compared (without letter groups)
+sparseMinLines = 5
+sparseMinPaired = 3
+sparseMaxAudio = 1200.0
+sparseMinShare = 0.6
+sparseMinSpan = 120.0
+sparseTolerance = 1.0
+sparseMargin = 3.0
+sparseMinOnsets = 3     # speech starts needed to correct word times
+
 
 class Terminated(Exception):
     """Transcription was cancelled by the caller."""
@@ -772,6 +801,35 @@ def transcribeRange(whisper, path, streamNo, start, end, lang, translate=False,
     return timeLines(lines)
 
 
+def transcribeWords(whisper, path, streamNo, ranges, lang, translate=False,
+        runCb=None, channels=None):
+    """Transcribe audio of `ranges` ((start, end) seconds) with word times.
+
+    Returns
+    -------
+    list of (float, float, str)
+        Lines from the start of their first word to the end of their last.
+    """
+    lines = []
+    for start, end in ranges:
+        audio = decodeRange(path, streamNo, start, end, runCb, channels)
+        segments, _info = whisper.transcribe(audio,
+                language=lang,
+                task='translate' if translate else 'transcribe',
+                beam_size=1,
+                vad_filter=True,
+                condition_on_previous_text=False,
+                word_timestamps=True)
+        for segment in segments:
+            if runCb and not runCb():
+                raise Terminated()
+            text = ' '.join(segment.text.split())
+            words = [ w for w in segment.words or [] if w.end > w.start ]
+            if text and words:
+                lines.append((start + words[0].start, start + words[-1].end, text))
+    return sorted(lines)
+
+
 def spreadOrder(count):
     """Chunk indices ordered to cover the whole file as soon as possible:
     first, last, middle, quarters and so on."""
@@ -1305,6 +1363,141 @@ def alignPiecewise(subs, speech, a, b):
     return offsets
 
 
+def _similarity(a, b):
+    return len(a & b) / min(len(a), len(b)) if a and b else 0.0
+
+
+def pairLines(subs, lines, minWordLen=None, ngrams=None):
+    """Pairs of subtitle and transcript lines saying the same (see
+    `sparseMinSim`), in order of both: the pairing with the highest total
+    similarity in which no two pairs cross.
+
+    subs and lines are lists of (start, end, text) tuples, sorted by start.
+
+    Returns
+    -------
+    list of (int, int)
+        Index of the subtitle line and of the transcript line.
+    """
+    minWordLen = sparseWordLen if minWordLen is None else minWordLen
+    subWords = [ _words(s[2], minWordLen, ngrams) for s in subs ]
+    lineWords = [ _words(l[2], minWordLen, ngrams) for l in lines ]
+    n, m = len(subs), len(lines)
+    score = [ [ 0.0 ] * (m + 1) for _ in range(n + 1) ]
+    for i in range(1, n + 1):
+        row, prev = score[i], score[i - 1]
+        for j in range(1, m + 1):
+            best = max(prev[j], row[j - 1])
+            sim = _similarity(subWords[i - 1], lineWords[j - 1])
+            if sim >= sparseMinSim and prev[j - 1] + sim > best:
+                best = prev[j - 1] + sim
+            row[j] = best
+
+    pairs = []
+    i, j = n, m
+    while i and j:
+        if score[i][j] == score[i - 1][j]:
+            i -= 1
+        elif score[i][j] == score[i][j - 1]:
+            j -= 1
+        else:
+            pairs.append((i - 1, j - 1))
+            i, j = i - 1, j - 1
+    return pairs[::-1]
+
+
+def _median(values):
+    values = sorted(values)
+    mid = len(values) // 2
+    return values[mid] if len(values) % 2 else (values[mid - 1] + values[mid]) / 2
+
+
+def sparseFit(subs, lines, minWordLen=None, ngrams=None):
+    """Synchronization formula from paired lines, for films with very
+    little dialogue (see `sparseMaxLines`).
+
+    subs are subtitle lines and lines transcript lines timed by their words
+    (see `transcribeWords`), both lists of (start, end, text) tuples.
+
+    Returns
+    -------
+    tuple of (float, float, list) or None
+        a and b of the formula (film time = a * subtitle time + b) and the
+        (subtitle start, transcript start) pairs that agree with it; `None`
+        when the pairs don't make one clear answer.
+    """
+    pairs = [ (subs[i][0], lines[j][0]) for i, j in pairLines(subs, lines, minWordLen, ngrams) ]
+    if len(pairs) < sparseMinLines:
+        logger.info('sparse dialogue: %i lines paired, too few', len(pairs))
+        return None
+
+    fits, seen = [], set()
+    for a in frameRatios():
+        for s, w in pairs:
+            agree = tuple(p for p in pairs if abs(p[1] - a * p[0] - (w - a * s)) <= sparseTolerance)
+            if len(agree) < 2 or (a, agree) in seen:
+                continue
+            seen.add((a, agree))
+            b = _median([ w2 - a * s2 for s2, w2 in agree ])
+            error = sum(abs(w2 - a * s2 - b) for s2, w2 in agree)
+            fits.append((len(agree), -error, a, b, list(agree)))
+    if not fits:
+        logger.info('sparse dialogue: %i lines paired, no two agree', len(pairs))
+        return None
+
+    fits.sort(key=lambda f: f[:2], reverse=True)
+    count, _error, a, b, agree = fits[0]
+    span = agree[-1][0] - agree[0][0]
+    logger.info('sparse dialogue: %i of %i paired lines agree on %.6fx%+.3f over %.0f s',
+            count, len(pairs), a, b, span)
+    if count < sparseMinLines or count < sparseMinShare * len(pairs) or span < sparseMinSpan:
+        logger.info('sparse dialogue: too little agreement')
+        return None
+
+    first, last = min(s[0] for s in subs), max(s[0] for s in subs)
+    for count2, _e, a2, b2, _agree in fits[1:]:
+        if count2 < count:
+            break
+        if max(abs((a - a2) * t + b - b2) for t in (first, last)) > 2 * sparseTolerance:
+            logger.info('sparse dialogue: %.6fx%+.3f fits as many lines, no clear answer', a2, b2)
+            return None
+    return a, b, agree
+
+
+def sparseShift(agree, speech, target=None):
+    """Shift (seconds) making lines synchronized by `sparseFit` start
+    `target` seconds before speech. They start where Whisper's first word
+    does, which is a little early (about 0.35 s in Sintel): the speech start
+    detected nearest to each of those words (within `leadReach`) gives the
+    difference, when at least `sparseMinOnsets` are found."""
+    target = leadTarget if target is None else target
+    onsets = [ start for start, end in speech or [] ]
+    diffs = []
+    for _sub, word in agree:
+        near = [ o - word for o in onsets if abs(o - word) <= leadReach ]
+        if near:
+            diffs.append(min(near, key=abs))
+    late = _median(diffs) if len(diffs) >= sparseMinOnsets else 0.0
+    logger.info('sparse dialogue: speech starts %+.3f s from the first words (%i measured), '
+            'target lead %.2f s', late, len(diffs), target)
+    return late - target
+
+
+def sparseWindows(lines, duration=None):
+    """Audio ranges around transcript lines (see `sparseMargin`), joined
+    where they overlap."""
+    ranges = []
+    for start, end, _text in sorted(lines):
+        start, end = max(start - sparseMargin, 0.0), end + sparseMargin
+        if duration:
+            end = min(end, duration)
+        if ranges and start <= ranges[-1][1]:
+            ranges[-1][1] = max(ranges[-1][1], end)
+        else:
+            ranges.append([ start, end ])
+    return [ (round(s, 3), round(e, 3)) for s, e in ranges ]
+
+
 def measureLead(lines, speech):
     """How long before speech subtitle lines start, see `leadShift`.
 
@@ -1702,6 +1895,69 @@ def getSpeech(path, streamNo, lang, channels=None, runCb=None):
     return loadSpeech(outDir)
 
 
+def wordLinesPath(outDir, ranges):
+    key = ','.join('{:.3f}-{:.3f}'.format(s, e) for s, e in ranges)
+    return os.path.join(outDir, 'words-{}.srt'.format(
+        hashlib.sha1(key.encode('utf-8')).hexdigest()[:12]))
+
+
+def getWordLines(path, outDir, streamNo, lang, ranges, translate=False, model=None,
+        channels=None, runCb=None):
+    """Lines of `ranges` timed by their words (see `transcribeWords`),
+    transcribed in this process or in separate Python (see `findPython`) and
+    cached in `outDir`, the stream's transcript cache."""
+    out = wordLinesPath(outDir, ranges)
+    if os.path.isfile(out):
+        return readSrt(out)
+    lang2 = whisperCode(lang)
+    os.makedirs(outDir, exist_ok=True)
+    logger.info('transcribing %i ranges with word times, %s total', len(ranges),
+            formatTime(sum(e - s for s, e in ranges)))
+
+    if _hasModule():
+        lines = transcribeWords(loadModel(model), path, streamNo, ranges, lang2,
+                translate, runCb, channels)
+        writeSrt(out, lines)
+        return lines
+
+    python = findPython()
+    if not python:
+        raise NotInstalled()
+    import subprocess
+    cmd = [ python, os.path.abspath(__file__), path, '--chunks-dir', outDir, '-l', lang2,
+            '--words', ','.join('{:.3f}-{:.3f}'.format(s, e) for s, e in ranges) ]
+    if model:
+        cmd += [ '-m', model ]
+    if streamNo is not None:
+        cmd += [ '-s', str(streamNo + 1) ]
+    if channels:
+        cmd += [ '--channels', ','.join(channels) ]
+    if translate:
+        cmd += [ '--translate' ]
+    logger.info('running transcription with word times: %s', ' '.join(cmd))
+    flags = 0x08000000 if sys.platform == 'win32' else 0  # no console window
+    env = dict(os.environ, PYTHONIOENCODING='utf-8', PYTHONUTF8='1')
+    proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE, creationflags=flags, env=env)
+    err = b''
+    try:
+        while True:
+            try:
+                _out, err = proc.communicate(timeout=0.5)
+                break
+            except subprocess.TimeoutExpired:
+                if runCb and not runCb():
+                    raise Terminated()
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+    if proc.returncode != 0 or not os.path.isfile(out):
+        raise RuntimeError('transcription process failed (code {}): {}'.format(proc.returncode,
+            ' | '.join(err.decode('utf-8', 'replace').strip().split('\n')[-5:])))
+    return readSrt(out)
+
+
 def getTranscriptChunks(path, streamNo, lang, translate=False, model=None,
         runCb=None, progressCb=None, chunkCb=None, planCb=None, channels=None):
     """Transcribe audio stream to cached SRT chunks, in this process or in
@@ -1767,6 +2023,9 @@ def main(argv=None):
             help='only print the spoken language (whisper code) and its probability')
     parser.add_argument('--speech-only', action='store_true',
             help='with --chunks-dir: only detect speech, without transcribing')
+    parser.add_argument('--words', metavar='RANGES',
+            help='with --chunks-dir: transcribe these ranges (start-end seconds, comma '
+            'separated) with word times (used by SubSync for films with little dialogue)')
     args = parser.parse_args(argv)
     streamNo = None if args.stream is None else args.stream - 1
     channels = [ ch.strip().upper() for ch in args.channels.split(',') if ch.strip() ] \
@@ -1787,6 +2046,13 @@ def main(argv=None):
         if args.detect_language:
             res = detectLanguage(args.input, streamNo, model=args.model)
             print('language {} {:.3f}'.format(*res) if res else 'language none')
+            return 0
+
+        if args.chunks_dir and args.words:
+            ranges = [ tuple(float(x) for x in r.split('-')) for r in args.words.split(',') ]
+            getWordLines(args.input, args.chunks_dir, streamNo, args.lang, ranges,
+                    translate=args.translate, model=args.model, channels=channels)
+            report('done')
             return 0
 
         if args.chunks_dir and args.speech_only:
