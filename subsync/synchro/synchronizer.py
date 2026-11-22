@@ -145,7 +145,11 @@ class Synchronizer(object):
         ''' Text a subtitle line (starting at `start` ms) is matched with. '''
         if self.matchTexts is None:
             return text
-        return ' '.join(self.matchTexts.get(start) or [ text ])
+        # times read back by the subtitle pipeline can be a fraction of a
+        # millisecond off (130079.99 for 130080)
+        ms = int(round(start))
+        found = self.matchTexts.get(ms) or self.matchTexts.get(ms - 1) or self.matchTexts.get(ms + 1)
+        return ' '.join(found or [ text ])
 
     def _createTranscriptPipeline(self, options, runCb=None):
         ''' There is no pocketsphinx model for some languages (e.g. Japanese),
