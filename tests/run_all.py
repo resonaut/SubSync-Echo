@@ -26,7 +26,8 @@ options:
     --app PATH       test this app instead of the latest release, e.g.
                      dist/subsync/subsync-cmd.exe, or "python run.py"
     --release TAG    test this release instead of the latest, e.g. 0.20
-    --films LIST     tos, sita or both (default tos,sita)
+    --films LIST     tos, sita (the default, these two gate releases), and
+                     the report-only films sintel and tos-vfr; all = every film
     --data DIR       downloads and results (default e2e-data)
     --install        first install the unit tests' packages, at the versions
                      the release builds use (.github/constraints.txt)
@@ -52,9 +53,13 @@ import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPO = 'resonaut/SubSync-Echo'
+# key: (name, script, data folder, report only). Report-only films show their
+# results (REPORT) but never fail a run, until they've proved themselves.
 FILMS = {
-    'tos': ('Tears of Steel', 'tests/e2e/tears_of_steel.py', 'tears-of-steel'),
-    'sita': ('Sita Sings the Blues', 'tests/e2e/sita_sings_the_blues.py', 'sita'),
+    'tos': ('Tears of Steel', 'tests/e2e/tears_of_steel.py', 'tears-of-steel', False),
+    'sita': ('Sita Sings the Blues', 'tests/e2e/sita_sings_the_blues.py', 'sita', False),
+    'sintel': ('Sintel', 'tests/e2e/more_films.py', 'sintel', True),
+    'tos-vfr': ('Tears of Steel, VFR', 'tests/e2e/more_films.py', 'tears-of-steel-vfr', True),
 }
 TEST_PACKAGES = ['numpy', 'av', 'faster-whisper']
 
@@ -286,14 +291,21 @@ def appTemp(app, data):
 
 
 def runFilm(key, app, data, temp):
-    name, script, sub = FILMS[key]
+    name, script, sub, reportOnly = FILMS[key]
     heading(name)
     env = dict(os.environ, TEMP=temp, TMP=temp, TMPDIR=temp)
     start = time.time()
-    code = subprocess.call([sys.executable, os.path.join(ROOT, script), '--app', app,
-                            '--data', os.path.join(data, sub),
-                            '--work', os.path.join(data, 'work', sub), '--download'], env=env)
-    return code == 0, minutes(time.time() - start)
+    cmd = [sys.executable, os.path.join(ROOT, script), '--app', app,
+           '--data', os.path.join(data, sub),
+           '--work', os.path.join(data, 'work', sub), '--download']
+    if script.endswith('more_films.py'):
+        cmd += ['--film', key]
+    code = subprocess.call(cmd, env=env)
+    took = minutes(time.time() - start)
+    if reportOnly:
+        # 'REPORT' when it ran, None (NOTE) when it couldn't; never a failure
+        return ('REPORT' if code == 0 else None), took + ('' if code == 0 else ', could not run')
+    return code == 0, took
 
 
 def main():
@@ -309,7 +321,7 @@ def main():
     parser.add_argument('-v', dest='verbose', action='store_true')
     args = parser.parse_args()
 
-    films = [f.strip() for f in args.films.split(',') if f.strip()]
+    films = list(FILMS) if args.films == 'all' else [f.strip() for f in args.films.split(',') if f.strip()]
     for f in films:
         if f not in FILMS:
             parser.error('unknown film {!r}, choose from {}'.format(f, ', '.join(FILMS)))
@@ -351,11 +363,17 @@ def main():
 
     heading('Summary')
     for part, ok, detail in results:
-        say('  {:<22} {:<5} {}'.format(part, {True: 'PASS', False: 'FAIL', None: 'NOTE'}[ok], detail))
+        status = ok if isinstance(ok, str) else {True: 'PASS', False: 'FAIL', None: 'NOTE'}[ok]
+        say('  {:<22} {:<6} {}'.format(part, status, detail))
     if not results:
         say('  nothing was run')
     passed = bool(results) and all(ok is not False for _, ok, _ in results)
-    say('\n' + ('Everything passed.' if passed else 'Something failed: see the output above.'))
+    if not passed:
+        say('\nSomething failed: see the output above.')
+    elif all(ok is True for _, ok, _ in results):
+        say('\nEverything passed.')
+    else:
+        say('\nEverything that is judged passed; REPORT and NOTE lines are shown, not judged.')
     return 0 if passed else 1
 
 

@@ -316,11 +316,24 @@ jobs:
           path: e2e-data/sita
           key: e2e-sita-${{ runner.os }}-v2
 
+      # report-only films: Sintel (674 MB) and a variable frame rate copy of
+      # Tears of Steel, made with PyAV
+      - uses: actions/cache@v4
+        with:
+          path: |
+            e2e-data/sintel
+            e2e-data/tears-of-steel-vfr
+          key: e2e-more-${{ runner.os }}-v1
+
+      - name: Install PyAV
+        shell: bash
+        run: python -m pip install -c .github/constraints.txt av
+
       # the same command anyone can run (doc/development.md); both films are
       # tested even when the first fails
       - name: End-to-end tests
         shell: bash
-        run: python tests/run_all.py e2e --app app/subsync-cmd.exe
+        run: python tests/run_all.py e2e --films all --app app/subsync-cmd.exe
 
       # Whisper's output differs a little between machines: keep the
       # transcripts to see which lines decided a result
@@ -331,6 +344,8 @@ jobs:
           path: |
             e2e-data/work/tears-of-steel
             e2e-data/work/sita/*.log
+            e2e-data/work/sintel
+            e2e-data/work/tears-of-steel-vfr
             e2e-data/temp/*/subsync-transcripts
 
   e2e-linux:
@@ -368,9 +383,21 @@ jobs:
           path: e2e-data/sita
           key: e2e-sita-${{ runner.os }}-v2
 
+      # report-only films: Sintel (674 MB) and a variable frame rate copy of
+      # Tears of Steel, made with PyAV
+      - uses: actions/cache@v4
+        with:
+          path: |
+            e2e-data/sintel
+            e2e-data/tears-of-steel-vfr
+          key: e2e-more-${{ runner.os }}-v1
+
+      - name: Install PyAV
+        run: python -m pip install -c .github/constraints.txt av
+
       # the same command anyone can run (doc/development.md)
       - name: End-to-end tests
-        run: python tests/run_all.py e2e --app app/subsync/subsync-cmd
+        run: python tests/run_all.py e2e --films all --app app/subsync/subsync-cmd
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -379,6 +406,8 @@ jobs:
           path: |
             e2e-data/work/tears-of-steel
             e2e-data/work/sita/*.log
+            e2e-data/work/sintel
+            e2e-data/work/tears-of-steel-vfr
             e2e-data/temp/*/subsync-transcripts
 
   release:

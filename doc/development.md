@@ -65,12 +65,20 @@ The columns of the tables:
 | `python tests/run_all.py` | the unit tests only, in seconds: the timing logic on synthetic films with known right answers. They need numpy (`pip install numpy`, or add `--install`). |
 | `python tests/run_all.py all` | the unit tests and both films |
 | `python tests/run_all.py e2e --films tos` | only Tears of Steel, the quicker film (372 MB) |
+| `python tests/run_all.py e2e --films all` | also the report-only films below (674 MB more, and PyAV: `pip install av`) |
 | `python tests/run_all.py e2e --release 0.20` | test an older release |
 | `python tests/run_all.py e2e --app dist/subsync/subsync-cmd.exe` | test the app you built |
 | `python tests/run_all.py e2e --app "python run.py"` | test the app run from source |
 | `python tests/run_all.py --install` | first install the unit tests' packages at the versions the release builds use |
 
 The start of a unit test run says which optional parts it found: with PyAV, faster-whisper and the built SubSync engine, more unit tests run; without them, those are skipped, not failed. GitHub Actions runs the unit tests on every push and the end-to-end tests before every release, with this same command.
+
+**Report-only films** show their results as REPORT but never fail a run or a release, until they've run on both systems for a while. GitHub Actions runs them before every release too.
+
+| Film | What it tests | Result now |
+|---|---|---|
+| **Tears of Steel, variable frame rate** (`--films tos-vfr`) | the film converted on your computer so its frame rate changes every few seconds (24, 12 and 16 frames per second), as in phone and screen recordings; English and Spanish subtitles. SubSync times `.srt` subtitles by the audio, so this checks that it reads such a file correctly. | both languages: every line within 0.2 s |
+| **[Sintel](https://durian.blender.org)** (Blender Foundation, CC BY 3.0, 15 minutes; `--films sintel`) | very little dialogue (26 lines) and much music; its official Japanese, French, Dutch, Russian, Chinese and Czech subtitles on the English audio, mistimed as 25 fps on the 24 fps film plus 2.5 s | no file saved in any language: Whisper hears only 14 short lines in the whole film, too few to confirm the timing, so SubSync saves nothing rather than guess |
 
 ## Building
 

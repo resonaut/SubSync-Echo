@@ -48,7 +48,14 @@ The speech detector counted about a quarter of the singing as speech; it didn't 
 
 Before the speech check, one of these films (Cars) had only 65% of lines within 0.2 s, because the original method stops listening once its answer looks good enough. Two more films were left out: their subtitle files don't match these copies of the films (one is 1.85 s early throughout, the other made for another frame rate).
 
-Anyone can repeat both tests: see [Building, testing and releasing](development.md).
+**Report-only tests** (from 0.21), shown but not yet judged:
+
+| Test | Result |
+|---|---|
+| Tears of Steel converted to a variable frame rate (24, 12 and 16 frames per second in turn), English and Spanish | **all lines within 0.2 s** |
+| Sintel, a free 15-minute film with only 26 subtitle lines and much music, 6 subtitle languages | **no file saved**: too little speech to confirm a timing |
+
+Anyone can repeat these tests: see [Building, testing and releasing](development.md).
 
 **Time,** on a laptop with an AMD Ryzen 9 5900HX processor and 8 GB of RAM, using no graphics card:
 - Most films: 1.5–2.5 minutes the first time, seconds when syncing the same film again.
