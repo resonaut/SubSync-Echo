@@ -148,6 +148,12 @@ regionMargin = 1.2      # fit elsewhere must be this much better to disagree
 piecewiseRange = 600.0
 piecewiseSplitCost = 10.0
 piecewiseFineRange = 0.5    # each piece is then fine tuned this far
+# offsets to choose from come from the regions and from windows of
+# piecewiseWindow seconds sliding by half of it: a cut near the end of a region
+# (or of the film) moves too few of the region's lines for its own best fit to
+# move, but most of a window's; a window also needs regionMinLines lines, and
+# its offset counts only when the next window (half over it) fits there too
+piecewiseWindow = 300.0
 
 # fitting subtitle lines to speech overlap leaves them slightly late: correct
 # subtitles appear a moment before people start speaking. Synchronized lines
@@ -1027,7 +1033,8 @@ def checkChunks(subs, chunks, a, b, minWordLen=5, ngrams=None):
     formula is right, time differences of the matches cluster around zero.
     A transcript line is measured against the time its subtitle line is
     shown: starting anywhere in it is on time (Whisper may split one
-    subtitle line in pieces), before or after it is that far off.
+    subtitle line in pieces), before or after it is that far off. Matches
+    are counted by subtitle line, so the pieces of one line count once.
 
     Parameters
     ----------
@@ -1067,6 +1074,7 @@ def checkChunks(subs, chunks, a, b, minWordLen=5, ngrams=None):
         if few and pool is None:
             continue
 
+        # (difference, subtitle line(s) matched) of every matched transcript line
         diffs = []
         for start, _, text in lines:
             words = _words(text, minWordLen, ngrams)
@@ -1076,24 +1084,27 @@ def checkChunks(subs, chunks, a, b, minWordLen=5, ngrams=None):
             hi = bisect.bisect_right(subTimes, start + checkWindow)
             # subtitle line sharing the most words; skipped when ambiguous
             # (words repeated in many lines, e.g. names, would match anywhere)
-            best, found = 0, []
-            for begin, end, sw in subWords[lo:hi]:
+            best, found, matched = 0, [], []
+            for k, (begin, end, sw) in enumerate(subWords[lo:hi], lo):
                 shared = len(words & sw)
                 if shared > best:
-                    best, found = shared, [ difference(start, begin, end) ]
+                    best, found, matched = shared, [ difference(start, begin, end) ], [ k ]
                 elif shared and shared == best:
                     found.append(difference(start, begin, end))
+                    matched.append(k)
             if found and max(found) - min(found) <= 2 * checkTolerance:
-                diffs.append(sum(found) / len(found))
+                diffs.append((sum(found) / len(found), tuple(matched)))
 
-        near = sum(1 for d in diffs if abs(d) <= checkTolerance)
+        # matches are counted by subtitle line: Whisper may split one line in
+        # pieces, and those are one piece of evidence, not several
+        near = len(set(k for d, k in diffs if abs(d) <= checkTolerance))
         # biggest cluster of differences elsewhere
-        others = sorted(d for d in diffs if abs(d) > checkTolerance)
+        others = sorted((d, k) for d, k in diffs if abs(d) > checkTolerance)
         other, j = 0, 0
         for i in range(len(others)):
-            while others[i] - others[j] > 2 * checkTolerance:
+            while others[i][0] - others[j][0] > 2 * checkTolerance:
                 j += 1
-            other = max(other, i - j + 1)
+            other = max(other, len(set(k for _d, k in others[j:i + 1])))
 
         # chunk with too few matches has no opinion, it disagrees only when
         # its matches clearly point elsewhere
@@ -1126,7 +1137,16 @@ def checkChunks(subs, chunks, a, b, minWordLen=5, ngrams=None):
     return disagree == 0 and agree >= checkMinChunks
 
 
+REGIONS_AGREE, REGIONS_DISAGREE, REGIONS_INCONCLUSIVE = 'agree', 'disagree', 'inconclusive'
+
+
 def checkRegions(subs, speech, a, b):
+    """`True` unless a region clearly fits speech elsewhere (see
+    `regionVerdict`): a veto, which no region being judged doesn't give."""
+    return regionVerdict(subs, speech, a, b) != REGIONS_DISAGREE
+
+
+def regionVerdict(subs, speech, a, b):
     """Check that subtitles fit detected speech with the formula in every
     region of the movie, not only on the whole.
 
@@ -1145,13 +1165,17 @@ def checkRegions(subs, speech, a, b):
 
     Returns
     -------
-    bool
-        `True` when no region clearly fits speech elsewhere.
+    str
+        `REGIONS_DISAGREE` when a region clearly fits speech elsewhere,
+        `REGIONS_AGREE` when at least one region fits where the formula puts
+        it and none elsewhere, `REGIONS_INCONCLUSIVE` when no region could be
+        judged (all with fewer than `regionMinLines` lines, as in a very
+        short video) or none fits clearly: then the regions confirm nothing.
     """
     import numpy as np
 
     if not subs or not speech:
-        return False
+        return REGIONS_DISAGREE
 
     step = refineStep
     search = int(round(regionSearch / step))
@@ -1167,7 +1191,7 @@ def checkRegions(subs, speech, a, b):
         voiceAll[int(round(start / step)):int(round(end / step))] = 1.0
     mean = float(voiceAll.mean())
 
-    disagree = 0
+    disagree, agree = 0, 0
     for no in range(count):
         lo = first + no * width
         hi = lo + width if no + 1 < count else last + 1.0
@@ -1202,6 +1226,7 @@ def checkRegions(subs, speech, a, b):
 
         if abs(pos - search) <= tol:
             verdict = 'agrees'
+            agree += 1
         elif best > 0.0 and (here <= 0.0 or best > regionMargin * here):
             verdict = 'DISAGREES'
             disagree += 1
@@ -1210,7 +1235,12 @@ def checkRegions(subs, speech, a, b):
         logger.info('region check %s - %s: %i lines, best fit %+.2f s: %s',
                 formatTime(lo)[:8], formatTime(hi)[:8], len(region), shift, verdict)
 
-    return disagree == 0
+    if disagree:
+        return REGIONS_DISAGREE
+    if not agree:
+        logger.info('region check: no region agrees or disagrees, it confirms nothing')
+        return REGIONS_INCONCLUSIVE
+    return REGIONS_AGREE
 
 
 def _regionOffsets(lines, speech, search):
@@ -1274,7 +1304,9 @@ def alignPiecewise(subs, speech, a, b):
     First every region of the movie (see `checkRegions`) finds the offset
     where its subtitles fit detected speech best, searched up to
     `piecewiseRange` seconds; a region holds many lines, so that is reliable.
-    These offsets (and the formula's own) are the only candidates. Then every
+    So does every window of `piecewiseWindow` seconds sliding over the
+    subtitles, for cuts that move only a part of a region. These offsets (and
+    the formula's own) are the only candidates. Then every
     subtitle line picks one of them by dynamic programming, maximizing overlap
     with speech, with a penalty for every change of the offset between
     consecutive lines. Finally every piece is fine tuned.
@@ -1304,6 +1336,19 @@ def alignPiecewise(subs, speech, a, b):
 
     # candidate offsets: the formula's and those of the regions, merged when
     # closer than regionTolerance
+    # and of shorter windows sliding over the subtitles (see piecewiseWindow),
+    # when two neighbouring windows fit at the same offset: a short window
+    # sometimes fits speech far away by chance, which its neighbour doesn't
+    first, last = mapped[0][0], mapped[-1][0]
+    at, previous = first, None
+    while at < last:
+        window = [ l for l in mapped if at <= l[0] < at + piecewiseWindow ]
+        fit = _regionOffsets(window, speech, piecewiseRange) if window else []
+        fit = fit[0] if fit else None
+        if fit and previous and abs(fit[3] - previous[3]) <= regionTolerance:
+            regions.append((previous[0], fit[1], previous[2] + fit[2], (fit[3] + previous[3]) / 2))
+        previous = fit
+        at += piecewiseWindow / 2
     candidates = [ 0.0 ]
     for lo, hi, count, shift in regions:
         logger.info('piecewise: region %s - %s, %i lines, fits speech at %+.2f s',

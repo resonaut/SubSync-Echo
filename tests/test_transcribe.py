@@ -187,6 +187,23 @@ class ChecksTest(FilmTest):
     def test_chunks_agree(self):
         self.assertTrue(t.checkChunks(self.file, self.chunks, SPEED, OFFSET))
 
+    def test_pieces_of_one_line_count_once(self):
+        # Whisper split one subtitle line in three; the rest of each part
+        # matches nothing. Three matches, but one line of evidence: not
+        # enough for a part to agree
+        words = [ 'harbor', 'castle', 'winter', 'dragon', 'forest', 'silver', 'garden', 'thunder',
+                  'mirror', 'candle', 'meadow' ]
+        subs = [ (100.0, 104.0, 'Remember the lighthouse tonight') ] + \
+               [ (200.0 + 60 * n, 202.0 + 60 * n, 'The ' + w) for n, w in enumerate(words) ]
+        pieces = [ (100.2, 101.0, 'Remember'), (101.5, 102.5, 'the lighthouse'), (102.8, 103.6, 'tonight') ]
+        filler = [ (110.0 + 5 * n, 112.0 + 5 * n, 'zzzzzz qqqqqq') for n in range(8) ]
+        part = sorted(pieces + filler)
+        self.assertFalse(t.checkChunks(subs, [ part, part ], 1.0, 0.0))
+        # three different lines do agree
+        three = sorted([ (100.2, 101.0, 'Remember'), (200.5, 201.0, 'harbor'),
+                         (260.5, 261.0, 'castle') ] + filler)
+        self.assertTrue(t.checkChunks(subs, [ three, three ], 1.0, 0.0))
+
     def test_chunks_refuse_cut(self):
         self.assertFalse(t.checkChunks(self.cutFile, self.chunks, SPEED, OFFSET))
 
@@ -276,6 +293,15 @@ class ChecksTest(FilmTest):
     def test_regions_refuse_cut(self):
         self.assertFalse(t.checkRegions(times(self.cutFile), self.speech, SPEED, OFFSET))
 
+    def test_region_verdicts(self):
+        self.assertEqual(t.regionVerdict(times(self.file), self.speech, SPEED, OFFSET), t.REGIONS_AGREE)
+        self.assertEqual(t.regionVerdict(times(self.cutFile), self.speech, SPEED, OFFSET), t.REGIONS_DISAGREE)
+        # a very short video: too few lines for any region to be judged; the
+        # regions confirm nothing (checkRegions, a veto, doesn't refuse it)
+        short = times(self.file)[:20]
+        self.assertEqual(t.regionVerdict(short, self.speech, SPEED, OFFSET), t.REGIONS_INCONCLUSIVE)
+        self.assertTrue(t.checkRegions(short, self.speech, SPEED, OFFSET))
+
 
 class PiecewiseTest(FilmTest):
     """Pieces are fitted by speech overlap, so lines exactly over speech are
@@ -296,6 +322,41 @@ class PiecewiseTest(FilmTest):
         self.assertAlmostEqual(pieces[1] - pieces[0], 45.0, delta=0.2)
         err = offsetErrors(cutFile, self.exact, SPEED, offsets)
         self.assertGreaterEqual(sum(e <= 0.1 for e in err) / len(err), 0.98, 'lines within 0.1 s')
+
+    def test_cuts_away_from_region_boundaries(self):
+        # the cut above falls exactly between two regions; these don't
+        for name, video in [
+                ('mid-region', cut(self.exact, 1337.0, 45.0)),
+                ('early', cut(self.exact, 450.0, 45.0)),
+                ('5 minutes before the end', cut(self.exact, 3300.0, 45.0)),
+                ('2.5 minutes before the end', cut(self.exact, 3450.0, 45.0)),
+                ('a scene removed', cut(self.exact, 1337.0, -30.0)),
+                ('5 seconds', cut(self.exact, 1337.0, 5.0)),
+                ('two cuts 5 minutes apart', cut(cut(self.exact, 2000.0, 45.0), 2345.0, 45.0)),
+                ('two cuts 20 minutes apart', cut(cut(self.exact, 1200.0, 30.0), 2430.0, 60.0)) ]:
+            with self.subTest(name):
+                file = times(mistime(video, SPEED, OFFSET))
+                offsets = t.alignPiecewise(file, self.speech, SPEED, OFFSET)
+                err = offsetErrors(file, self.exact, SPEED, offsets)
+                self.assertGreaterEqual(sum(e <= 0.1 for e in err) / len(err), 0.98, 'lines within 0.1 s')
+
+    @unittest.expectedFailure
+    def test_short_section_between_two_cuts(self):
+        # known limit: a section of 100 s (24 lines) between two cuts has
+        # fewer lines than a window needs (regionMinLines), so its offset is
+        # never a candidate; its lines keep the offset around them
+        file = times(mistime(cut(cut(self.exact, 2000.0, 45.0), 2145.0, 45.0), SPEED, OFFSET))
+        offsets = t.alignPiecewise(file, self.speech, SPEED, OFFSET)
+        err = offsetErrors(file, self.exact, SPEED, offsets)
+        self.assertGreaterEqual(sum(e <= 0.1 for e in err) / len(err), 0.98)
+
+    def test_no_pieces_without_a_cut(self):
+        for seed in (3, 4, 5):
+            with self.subTest(film=seed):
+                speech = makeSpeech(3600.0, seed=seed)
+                file = times(mistime(makeSubtitles(speech, lead=0.0, tail=0.0, seed=seed), SPEED, OFFSET))
+                offsets = t.alignPiecewise(file, speech, SPEED, OFFSET)
+                self.assertEqual(len(set(round(o, 1) for o in offsets)), 1)
 
     def test_normal_file_stays_one_piece(self):
         file = times(mistime(self.exact, SPEED, OFFSET))

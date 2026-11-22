@@ -237,11 +237,17 @@ class Synchronizer(object):
                     'transcribed chunks', chunksDone, res[0], res[1])
             return self._transcriptMismatch(subs, speech, chunks, res)
 
-        # and every region of the movie must fit speech, transcribed or not
-        if not transcribe.checkRegions([ s[:2] for s in subs ], speech, res[0], res[1]):
+        # and every region of the movie must fit speech, transcribed or not;
+        # when no region can be judged (a very short video), the transcribed
+        # chunks above are what confirmed it
+        regions = transcribe.regionVerdict([ s[:2] for s in subs ], speech, res[0], res[1])
+        if regions == transcribe.REGIONS_DISAGREE:
             logger.info('after %i transcript chunks: %.6fx%+.3f not confirmed by '
                     'speech in every region', chunksDone, res[0], res[1])
             return self._transcriptMismatch(subs, speech, chunks, res)
+        if regions == transcribe.REGIONS_INCONCLUSIVE:
+            logger.info('after %i transcript chunks: no region could be judged, '
+                    'confirmed by the transcribed chunks alone', chunksDone)
 
         # lines start a moment before speech, like correct subtitles do
         shift = transcribe.leadShift([ (res[0] * s[0] + res[1], res[0] * s[1] + res[1])
@@ -341,7 +347,9 @@ class Synchronizer(object):
         if res is None:
             logger.info('%s not confirmed by speech, kept as found', stats.formula)
             return False
-        if not transcribe.checkRegions(subs, speech, res[0], res[1]):
+        # the polish needs the regions' confirmation: without it (no region
+        # could be judged), the original method's result stays as found
+        if transcribe.regionVerdict(subs, speech, res[0], res[1]) != transcribe.REGIONS_AGREE:
             logger.info('%.6fx%+.3f not confirmed by speech in every region, %s kept',
                     res[0], res[1], stats.formula)
             return False
