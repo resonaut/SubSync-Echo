@@ -184,7 +184,9 @@ leadMaxShift = 0.3
 # seconds, they are at least sparseMinShare of all pairs and span
 # sparseMinSpan seconds, and no other
 # speed and offset fitting as many pairs would move a line by more than
-# 2 * sparseTolerance. Longer subtitles never take this way. The offset is
+# 2 * sparseTolerance, and no sparseCutLines of the pairs left out agree among
+# themselves on another offset (as subtitles of a different cut would).
+# Longer subtitles never take this way. The offset is
 # then measured again on every subtitle line that has exactly one transcript
 # line starting within sparseTolerance (see sparseRefine): which lines pair
 # by text depends on the translation, which differs a little between
@@ -200,6 +202,7 @@ sparseMinSpan = 120.0
 sparseTolerance = 1.0
 sparseMargin = 3.0
 sparseMinOnsets = 3     # speech starts needed to correct word times
+sparseCutLines = 2      # paired lines agreeing on another offset: another cut
 
 
 class Terminated(Exception):
@@ -1464,6 +1467,18 @@ def sparseFit(subs, lines, minWordLen=None, ngrams=None):
             break
         if max(abs((a - a2) * t + b - b2) for t in (first, last)) > 2 * sparseTolerance:
             logger.info('sparse dialogue: %.6fx%+.3f fits as many lines, no clear answer', a2, b2)
+            return None
+
+    # the pairs left out must not agree among themselves on another offset:
+    # that's what subtitles of a different cut look like, the lines after a
+    # scene added or removed (single stray pairs are mismatched lines)
+    rest = [ p for p in pairs if p not in agree ]
+    for s, w in rest:
+        other = w - a * s
+        group = [ p for p in rest if abs(p[1] - a * p[0] - other) <= sparseTolerance ]
+        if len(group) >= sparseCutLines and abs(other - b) > 2 * sparseTolerance:
+            logger.info('sparse dialogue: %i other paired lines agree on %+.1f s more, the '
+                    'subtitles may be for a different cut', len(group), other - b)
             return None
     return sparseRefine(subs, lines, a, b, agree)
 

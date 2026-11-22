@@ -403,6 +403,28 @@ class SparseDialogueTest(unittest.TestCase):
         self.assertLess(len(t.pairLines(weak, lines)), len(t.pairLines(subs, lines)))
         self.assertAlmostEqual(full[1], part[1], places=6)
 
+    def test_different_cut_refused(self):
+        # a 45 s scene added at 7:30: the 3 lines heard after it agree on
+        # another offset; most lines agree, but saving would put 6 lines 45 s off
+        subs, lines = self.film(outlier=None)
+        heard = [ (s + 45.0, e + 45.0, x) if s >= 450.0 else (s, e, x) for s, e, x in lines ]
+        self.assertIsNone(t.sparseFit(mistime(subs, 25 / 24, 2.5), heard))
+
+    def test_repeated_lines_never_give_a_wrong_answer(self):
+        # the same short line said again and again ("Scales!"): pairing may
+        # pick the wrong one of them, which must not move the result
+        subs, lines = self.film(outlier=None)
+        repeated = { 13, 16, 18, 22, 23 }
+        subs = [ (s, e, 'Scales!' if no in repeated else x) for no, (s, e, x) in enumerate(subs) ]
+        lines = [ (s, e, 'Scales!' if no in repeated else x) for no, (s, e, x) in zip(self.HEARD, lines) ]
+        lines.append((self.STARTS[23] - 0.35, self.STARTS[23] + 1.0, 'Scales!'))   # heard, not in HEARD
+        mistimed = mistime(subs, 25 / 24, 2.5)
+        res = t.sparseFit(mistimed, sorted(lines))
+        if res is not None:
+            a, b, _agree = res
+            for (s, _e, _x), (m, _e2, _x2) in zip(subs, mistimed):
+                self.assertLess(abs(a * m + b - (s - 0.35)), 0.5)
+
     def test_subtitles_of_another_film_refused(self):
         _subs, lines = self.film()
         rnd = random.Random(3)
