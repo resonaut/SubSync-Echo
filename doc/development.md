@@ -89,10 +89,11 @@ Windows and Linux packages are built by GitHub Actions; see [.github/workflows/b
 
 ## Releasing
 
-1. In [CHANGELOG.md](../CHANGELOG.md), rename **Unreleased** to the new version and date.
-2. Push a version tag such as `0.21`.
+1. In [CHANGELOG.md](../CHANGELOG.md), check the **Highlights** at the top of **Unreleased**: 3–5 points saying in plain words what the version means for people using it, each backed by a test result in the entries below. Then rename **Unreleased** to the new version and date.
+2. See the release page before tagging: `python .github/release_notes.py 0.21` prints it.
+3. Push a version tag such as `0.21`.
 
-The tag builds the package and publishes a release. Its "What's new" comes from that changelog section. A tag without a changelog entry stops before building.
+The tag builds the packages, runs the end-to-end tests on both and publishes a release only when they pass. Its page ([.github/release-notes.md](../.github/release-notes.md)) shows the version's highlights and links to its whole section of the changelog for everything else. A tag without a changelog section, or a section without highlights, stops before building.
 
 ## The icon
 

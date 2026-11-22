@@ -1,18 +1,24 @@
-<!-- Release page template. The release workflow replaces {{VERSION}} with the
-     version and {{CHANGES}} with that version's section of CHANGELOG.md.
-     Keep it a short overview: the full guide is README.md. -->
-**SubSync Echo** syncs subtitles to a video's audio, in almost any language. It listens to what is said and moves every line to where it's spoken, using the Whisper speech recognition model. It works for Japanese and English films, and for subtitles in the same language as the audio or a different one (such as English subtitles on a Japanese film, or Spanish subtitles on an English one). It's a continuation of the original SubSync, and everything runs on your own computer.
+<!-- Release page template. The release workflow (.github/release_notes.py)
+     replaces {{VERSION}} with the version, {{HIGHLIGHTS}} with the Highlights
+     of that version's section of CHANGELOG.md, and {{CHANGES_URL}} with a
+     link to the whole section. Keep it short and friendly: the details live
+     in the CHANGELOG, the guide in the README. -->
+**SubSync Echo fixes subtitles that are out of sync with your video.** It listens to what is said and moves every line to the moment it's spoken: anime and other Japanese films, English films, and subtitles in a different language from the audio. Everything runs on your own computer, and nothing is uploaded.
 
-## What's new
+## What's new in {{VERSION}}
 
-{{CHANGES}}
+{{HIGHLIGHTS}}
+
+**[Everything that changed in {{VERSION}}]({{CHANGES_URL}})**, with the test results behind each point.
 
 ## Get started
 
-1. **Windows:** download **`subsync-{{VERSION}}-portable-amd64.exe`** below and run it to unpack SubSync, then run **`subsync.exe`** in the new `subsync` folder (or use the zip). **Linux:** download **`subsync-{{VERSION}}-linux-x86_64.tar.xz`**, unpack it and run **`./subsync/subsync`**.
-2. Choose your subtitles and the video, then click **Start**. SubSync detects the audio language.
-3. The first time, SubSync downloads its speech model (about 490 MB, once), and for subtitles in a language other than English, its translation model (about 490 MB, once).
+1. **Windows:** download **`subsync-{{VERSION}}-portable-amd64.exe`** below, run it to unpack, then open **`subsync.exe`** in the new `subsync` folder. **Linux:** download **`subsync-{{VERSION}}-linux-x86_64.tar.xz`**, unpack it and run **`./subsync/subsync`**.
+2. Choose your subtitles and the video, then click **Start**.
+3. When it says **Subtitles synchronized**, click **Save**.
 
-Needs 64-bit Windows 10 or 11, or 64-bit Linux (Ubuntu 22.04 or newer and similar), and 8 GB of RAM. If Windows shows *"Windows protected your PC"*, click **More info**, then **Run anyway**. To check a download, compare its checksum with `SHA256SUMS` below ([how](https://github.com/resonaut/SubSync-Echo/blob/master/SECURITY.md#release-files)).
+The first time, SubSync downloads its speech model once (about 490 MB), and for subtitles that aren't in English, its translation model (about 490 MB). After that it works offline. It needs 64-bit Windows 10 or 11, or 64-bit Linux (Ubuntu 22.04 or newer and similar), and 8 GB of RAM.
 
-**[Full guide](https://github.com/resonaut/SubSync-Echo#readme)**: using it, what the messages mean, test results, known limits and troubleshooting.
+If Windows shows *"Windows protected your PC"*, click **More info**, then **Run anyway**: SubSync is new and not yet known to Windows. To check a download, compare its checksum with `SHA256SUMS` below ([how](https://github.com/resonaut/SubSync-Echo/blob/{{VERSION}}/SECURITY.md#release-files)).
+
+**[User guide](https://github.com/resonaut/SubSync-Echo/blob/{{VERSION}}/doc/guide.md)** · **[Questions and answers](https://github.com/resonaut/SubSync-Echo#questions)** · **[Report a problem](https://github.com/resonaut/SubSync-Echo/issues/new?template=bug_report.yml)**

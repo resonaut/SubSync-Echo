@@ -2,9 +2,15 @@
 
 All notable changes to SubSync Echo are listed here, newest first. Version numbers continue from the original SubSync (last release 0.17).
 
-The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Add every change under **Unreleased**. When releasing, rename that section to the new version and date. The release page takes its "What's new" from that section.
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Add every change under **Unreleased**. Each version starts with a few **Highlights**: what the version means for people using it, in plain words, and only what was tested. The release page shows the highlights and links here for the rest. When releasing, rename that section to the new version and date.
 
 ## [Unreleased]
+
+### Highlights
+- **Subtitles synced automatically on your media server.** Watch mode keeps an eye on your Jellyfin, Plex or Emby folders and syncs each new subtitle as it arrives, keeping the original next to it. Bazarr can also run SubSync Echo after every subtitle it downloads. See the [home server guide](doc/home-server.md).
+- **Films with very little dialogue can now be synced.** Sintel, a 15-minute film with only 26 lines and much music, now syncs in 5 of its 6 subtitle languages, where it synced in none before.
+- **More precise English films.** The timing is now checked against the speech in the whole film: 7 of 11 English test films came out with every line within 0.2 seconds (one of them was at 65% before). Songs and long sentences no longer make SubSync refuse subtitles that are right.
+- **Easier to trust and to start with.** Every download comes with a checksum, a shorter README and a new user guide explain it in plain words, and anyone can rerun the accuracy tests with one command.
 
 ### Fixed
 - **Translated subtitles were partly checked in their own language.** Subtitles in another language are translated to English for matching, and the check of each transcribed part looks up each line's translation by its start time. For some lines the time read back was a fraction of a millisecond off, so they were compared untranslated and could never match (in Sintel's Russian subtitles, 3 of 26 lines). The lookup now allows for it. Tears of Steel in 6 languages, Sita Sings the Blues in 5 and the 26 test cases on 9 Japanese films give the same results as before.
@@ -22,6 +28,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Add
 - Release pages list a `SHA256SUMS` file with the checksum of every download.
 
 ### Changed
+- **Shorter, friendlier release pages.** A release page now shows the version's highlights in plain words and links to its section of this changelog for the details and test results, instead of the whole section (about 380 words instead of about 1,000). A version needs highlights to be released.
 - **A shorter README** (about 900 words instead of 2,550): what SubSync Echo does, a quick start, a summary of the results and the most common questions. Installing, using the app, more questions, privacy, known limits, troubleshooting and the command line moved to a new [user guide](doc/guide.md), the credits to [doc/credits.md](doc/credits.md).
 - **Subtitle languages are read from more file names:** words media servers and Bazarr put after the language are skipped (`Movie.en.forced.srt`, `Movie.en.hi.srt` and `Movie.fr.sdh.srt` are now read as English, English and French; before, no language was found), and the other kind of three-letter codes is understood too (`fra`, `deu`, `zho`, `ces` and others, besides `fre`, `ger`, `chi`, `cze`), on the command line and in file names.
 - **The project is now called SubSync Echo** (README, release pages), to tell it apart from the original SubSync. Its README and release pages now open with what it does for every language, not only Japanese. The app and its files keep the name `subsync`, and the repository moved to [resonaut/SubSync-Echo](https://github.com/resonaut/SubSync-Echo) (links to the old addresses, Z0rdic/SubSync-Echo and subsync-whisper, redirect).
