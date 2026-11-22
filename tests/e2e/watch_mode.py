@@ -40,7 +40,7 @@ def appCommand(app):
     Windows; otherwise a command such as "python run.py" is split."""
     if os.path.exists(app):
         return [ os.path.abspath(app) ]
-    return [ os.path.abspath(x) if os.path.exists(x) else x for x in app.split() ]
+    return [ os.path.abspath(x) if os.path.isfile(x) else x for x in app.split() ]
 
 
 def age(path, seconds):

@@ -137,7 +137,7 @@ def main():
         if os.path.exists(args.app):
             app = [ os.path.abspath(args.app) ]
         else:
-            app = [ os.path.abspath(x) if os.path.exists(x) else x for x in args.app.split() ]
+            app = [ os.path.abspath(x) if os.path.isfile(x) else x for x in args.app.split() ]
         cmd = app + [ '--cli', '--loglevel=INFO', '--logfile=' + log, 'sync',
                 '--sub', sub, '--sub-lang=' + LANGUAGES[lang], '--ref', video,
                 '--ref-stream-by-type=audio', '--out', out, '--overwrite' ]
