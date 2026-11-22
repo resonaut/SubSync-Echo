@@ -20,6 +20,10 @@ How it works:
   - a state file remembers each subtitle's size and time, so nothing is synced
     twice, and a subtitle that couldn't be synced is tried again only when the
     file changes (for example when a new one is downloaded);
+  - when the models it needs can't be downloaded (no internet yet), the
+    subtitle is tried again an hour later;
+  - a subtitle renamed or moved within the library (as Radarr and Sonarr do)
+    isn't synced again, and its kept original follows it;
   - on the first start, subtitles already in the library are only noted, not
     synced, unless --existing is given.
 
@@ -40,6 +44,12 @@ FLAGS = { 'forced', 'sdh', 'cc', 'hi', 'default', 'full', 'signs', 'songs', 'for
 ORIG = '.orig'
 TMP = '.subsync-tmp-'
 STATE_VERSION = 1
+RETRY = 3600        # seconds before a sync that couldn't run is tried again
+
+
+class Retry(Exception):
+    """The sync couldn't run for a passing reason (models not downloaded):
+    the subtitle is tried again after RETRY seconds."""
 
 
 def stem(name):
@@ -117,6 +127,9 @@ class State(object):
     def get(self, sub):
         return self.files.get(os.path.abspath(sub))
 
+    def move(self, old, new):
+        self.files[os.path.abspath(new)] = self.files.pop(old)
+
     def set(self, sub, fp, status, **info):
         rec = dict(info, fp=fp, status=status,
                    at=datetime.datetime.now().replace(microsecond=0).isoformat())
@@ -142,6 +155,7 @@ def plan(dirs, state, now, settle, existing, langFn):
     changing, are left for a later look."""
     todo = []
     baseline = state.isNew and not existing
+    known = { tuple(rec['fp']): path for path, rec in state.files.items() }
     for sub, video in scan(dirs):
         try:
             fp = fingerprint(sub)
@@ -149,7 +163,10 @@ def plan(dirs, state, now, settle, existing, langFn):
             continue        # removed meanwhile
         rec = state.get(sub)
         if rec and rec['fp'] == fp:
-            continue        # synced, noted or refused already, unchanged since
+            if rec['status'] != 'error' or now < rec.get('retry', 0):
+                continue    # synced, noted or refused already, unchanged since
+        elif rec is None and moved(known.get(tuple(fp)), sub, state):
+            continue        # renamed or moved, same file
         if baseline:
             state.set(sub, fp, 'existing')
             continue
@@ -169,6 +186,21 @@ def plan(dirs, state, now, settle, existing, langFn):
     return todo
 
 
+def moved(old, new, state):
+    """When a subtitle seen before under the name old (same size and time)
+    is now at new and no longer at old, it was renamed or moved: its record
+    follows it, and so does its kept original. Returns True then."""
+    if old is None or os.path.exists(old):
+        return False
+    state.move(old, new)
+    if os.path.exists(old + ORIG) and not os.path.exists(new + ORIG):
+        try:
+            os.replace(old + ORIG, new + ORIG)
+        except OSError:
+            pass
+    return True
+
+
 def syncOne(sub, video, lang, syncFn, state):
     """Syncs one subtitle with syncFn(sub, video, lang, out) -> bool, which
     writes the result to out. On success the result replaces the subtitle and
@@ -178,13 +210,19 @@ def syncOne(sub, video, lang, syncFn, state):
     tmp = os.path.join(folder, TMP + name)
     fp = fingerprint(sub)
     try:
+        open(tmp, 'w').close()      # can it write here? (before minutes of work)
+        os.remove(tmp)              # (the app wouldn't overwrite it)
         ok = syncFn(sub, video, lang, tmp)
-        if ok and os.path.exists(tmp):
+        if ok and os.path.exists(tmp) and os.path.getsize(tmp) > 0:
             if fingerprint(sub) != fp:
                 # replaced while syncing (a new download): try that one later
                 return state.get(sub)
             os.replace(sub, sub + ORIG)
-            os.replace(tmp, sub)
+            try:
+                os.replace(tmp, sub)
+            except OSError:
+                os.replace(sub + ORIG, sub)     # put the subtitle back
+                raise
             return state.set(sub, fingerprint(sub), 'synced', video=video, lang=lang)
         return state.set(sub, fp, 'failed', video=video, lang=lang,
                          note="couldn't be synced; tried again when the file changes")
@@ -222,6 +260,13 @@ def watch(dirs, statePath, syncFn, langFn, interval=60, settle=120, existing=Fal
             log('[*] syncing {}'.format(sub))
             try:
                 rec = syncOne(sub, video, lang, syncFn, state)
+            except Retry as err:
+                log('[-] {}: {}; tried again in {} minutes'.format(sub, err, RETRY // 60))
+                try:
+                    rec = state.set(sub, fingerprint(sub), 'error', video=video, note=str(err),
+                                    retry=clock() + RETRY)
+                except OSError:
+                    rec = None
             except Exception as err:
                 log('[!] {}: {}'.format(sub, err))
                 try:
@@ -260,7 +305,12 @@ def run(watchArgs, verbosity=1, offline=False):
             'ref': { 'path': video, 'streamByType': 'audio' },
             'out': { 'path': out },
         }])
-        return app.runTasks(tasks) == 0
+        res = app.runTasks(tasks)
+        if app.interrupted:
+            raise KeyboardInterrupt
+        if app.assetsMissing:
+            raise Retry("the models it needs couldn't be downloaded")
+        return res == 0
 
     def langFn(word):
         return getLangFromPath('x.{}.srt'.format(word))

@@ -30,6 +30,8 @@ What it does:
 - The subtitle language comes from the file name (`.en.`, `.eng.`, `.fra.`, also with `forced`, `sdh`, `cc` or `hi` after it). The audio language is detected. A subtitle without a language in its name is skipped.
 - It syncs one subtitle at a time. The result replaces the subtitle, so your media server shows the synced one with no setup, and the original is kept next to it as `.orig`, a name media servers ignore. To undo, rename the `.orig` file back.
 - When a subtitle can't be synced (for example a film with very little speech), the file is left as it was and tried again only when it changes, for instance when a new one is downloaded.
+- When it can't run at all because the models it needs couldn't be downloaded (no internet yet), it tries again an hour later.
+- A subtitle renamed or moved within the library, as Radarr and Sonarr do when they rename a film, isn't synced again, and its `.orig` file follows it.
 - A state file remembers what it did, so nothing is synced twice and SubSync's own results aren't synced again. It's kept as `watch-state.json` in the settings folder (`~/.config/subsync` on Linux), or where `--state` says.
 - **On the first start, subtitles already in your library are only noted, not synced.** Only subtitles that arrive or change afterwards are synced. To sync the whole library once, add `--existing` (at 1.5–2.5 minutes per film, a big library takes a long time).
 

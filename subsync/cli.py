@@ -78,7 +78,7 @@ class AssetsVerifier(object):
         if not tasks:
             return
         if transcribe.isModelInstalled() is False and not self.downloadSpeechModel():
-            return
+            return False    # the speech model couldn't be downloaded
 
         for task in tasks:
             pr.println(1, '[+] detecting audio language of {}'.format(task.ref.path))
@@ -226,10 +226,13 @@ class App(object):
         self.startTime = time.monotonic()
         self.lastTime = -1000
         self.succeeded = 0
+        self.assetsMissing = False      # models couldn't be downloaded (watch mode retries later)
+        self.interrupted = False
         sync = None
 
         try:
-            self.assetsDownloader.detectLanguages(tasks)
+            if self.assetsDownloader.detectLanguages(tasks) is False:
+                self.assetsMissing = True
             validator.validateTasks(tasks, outputRequired=True)
         except Exception as err:
             pr.printException(0, err)
@@ -237,6 +240,7 @@ class App(object):
 
         try:
             if not self.assetsDownloader.run(tasks):
+                self.assetsMissing = True
                 return 2
 
             sync = SyncController(listener=self)
@@ -250,6 +254,7 @@ class App(object):
 
         except KeyboardInterrupt:
             pr.println(1, '[-] interrupted by user')
+            self.interrupted = True
             sync and sync.terminate()
             return 1
 

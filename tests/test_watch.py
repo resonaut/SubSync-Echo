@@ -12,6 +12,7 @@ import shutil
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 _path = os.path.join(os.path.dirname(__file__), '..', 'subsync', 'watch.py')
 _spec = importlib.util.spec_from_file_location('watch', _path)
@@ -50,6 +51,8 @@ class Library(object):
         return os.path.exists(os.path.join(self.root, name))
 
     def sync(self, sub, video, lang, out):
+        # like the app, which saves under another name when out exists
+        assert not os.path.exists(out), 'out exists'
         self.synced.append((os.path.relpath(sub, self.root), lang))
         with open(sub, encoding='utf-8') as src, open(out, 'w', encoding='utf-8') as dst:
             dst.write('synced: ' + src.read())
@@ -203,6 +206,74 @@ class WatchTest(unittest.TestCase):
         self.lib.run()
         self.assertEqual(self.lib.read('Movie.en.srt'), 'synced: second')
         self.assertEqual(self.lib.read('Movie.en.srt.orig'), 'second')
+
+    def test_sync_that_couldnt_run_is_retried_later(self):
+        def noModels(sub, video, lang, out):
+            raise watch.Retry("the models it needs couldn't be downloaded")
+
+        now = time.time()
+        self.lib.add('Movie.mkv')
+        self.lib.run()
+        self.lib.add('Movie.en.srt')
+        self.lib.run(syncFn=noModels, clock=lambda: now)
+        self.assertEqual(self.lib.status('Movie.en.srt'), 'error')
+        self.lib.run(clock=lambda: now + 60)
+        self.assertEqual(self.lib.synced, [], 'not before an hour')
+        self.lib.run(clock=lambda: now + watch.RETRY + 1)
+        self.assertEqual(self.lib.read('Movie.en.srt'), 'synced: original')
+
+    def test_stopping_during_a_sync_records_nothing(self):
+        def stopped(sub, video, lang, out):
+            raise KeyboardInterrupt
+
+        self.lib.add('Movie.mkv')
+        self.lib.run()
+        self.lib.add('Movie.en.srt')
+        with self.assertRaises(KeyboardInterrupt):
+            self.lib.run(syncFn=stopped)
+        self.assertEqual(self.lib.read('Movie.en.srt'), 'original')
+        self.assertFalse(self.lib.exists(watch.TMP + 'Movie.en.srt'))
+        self.lib.run()
+        self.assertEqual(self.lib.read('Movie.en.srt'), 'synced: original', 'synced on the next start')
+
+    def test_renamed_subtitle_is_not_synced_again(self):
+        self.lib.add('Movie.mkv')
+        self.lib.run()
+        self.lib.add('Movie.en.srt')
+        self.lib.run()
+        os.makedirs(os.path.join(self.lib.root, 'Movie (2010)'))
+        for old, new in [ ('Movie.mkv', 'Movie (2010)/Movie (2010).mkv'),
+                          ('Movie.en.srt', 'Movie (2010)/Movie (2010).en.srt') ]:
+            os.rename(os.path.join(self.lib.root, old), os.path.join(self.lib.root, new))
+        self.lib.run()
+        self.assertEqual(len(self.lib.synced), 1)
+        self.assertEqual(self.lib.read('Movie (2010)/Movie (2010).en.srt.orig'), 'original', 'the original follows it')
+        self.assertEqual(self.lib.status(os.path.join('Movie (2010)', 'Movie (2010).en.srt')), 'synced')
+
+    def test_empty_result_is_not_used(self):
+        self.lib.add('Movie.mkv')
+        self.lib.run()
+        self.lib.add('Movie.en.srt')
+        self.lib.run(syncFn=lambda sub, video, lang, out: True)
+        self.assertEqual(self.lib.read('Movie.en.srt'), 'original')
+        self.assertEqual(self.lib.status('Movie.en.srt'), 'failed')
+
+    def test_subtitle_is_put_back_when_the_swap_fails(self):
+        realReplace = os.replace
+
+        def replace(src, dst):
+            if os.path.basename(src).startswith(watch.TMP):
+                raise PermissionError('in use')
+            realReplace(src, dst)
+
+        self.lib.add('Movie.mkv')
+        self.lib.run()
+        self.lib.add('Movie.en.srt')
+        with mock.patch.object(watch.os, 'replace', replace):
+            self.lib.run()
+        self.assertEqual(self.lib.read('Movie.en.srt'), 'original')
+        self.assertFalse(self.lib.exists('Movie.en.srt.orig'))
+        self.assertEqual(self.lib.status('Movie.en.srt'), 'failed')
 
     def test_hidden_kept_and_temporary_files_are_ignored(self):
         self.lib.add('Movie.mkv')
