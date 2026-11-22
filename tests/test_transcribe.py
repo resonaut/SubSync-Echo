@@ -393,6 +393,16 @@ class SparseDialogueTest(unittest.TestCase):
         for (s, _e, _x), (m, _e2, _x2) in zip(subs, mistime(subs, 25 / 24, 2.5)):
             self.assertLess(abs(a * m + b - (s - 0.35)), 0.3)
 
+    def test_offset_does_not_depend_on_lines_paired_by_text(self):
+        # a weaker translation pairs fewer lines; the offset is measured on
+        # every line near a transcript line, so it comes out the same
+        subs, lines = self.film()
+        weak = [ (st, e, 'qqxz vvkk' if no in (2, 4, 8, 13, 20) else x)
+                 for no, (st, e, x) in enumerate(subs) ]
+        full, part = t.sparseFit(subs, lines), t.sparseFit(weak, lines)
+        self.assertLess(len(t.pairLines(weak, lines)), len(t.pairLines(subs, lines)))
+        self.assertAlmostEqual(full[1], part[1], places=6)
+
     def test_subtitles_of_another_film_refused(self):
         _subs, lines = self.film()
         rnd = random.Random(3)

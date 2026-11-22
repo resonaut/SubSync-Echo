@@ -184,7 +184,11 @@ leadMaxShift = 0.3
 # seconds, they are at least sparseMinShare of all pairs and span
 # sparseMinSpan seconds, and no other
 # speed and offset fitting as many pairs would move a line by more than
-# 2 * sparseTolerance. Longer subtitles never take this way.
+# 2 * sparseTolerance. Longer subtitles never take this way. The offset is
+# then measured again on every subtitle line that has exactly one transcript
+# line starting within sparseTolerance (see sparseRefine): which lines pair
+# by text depends on the translation, which differs a little between
+# computers, and an offset from 5 or 6 lines moved by up to 0.1 s with it.
 sparseMaxLines = 300
 sparseMinSim = 0.34     # share of the shorter line's words found in the other
 sparseWordLen = 4       # shortest word compared (without letter groups)
@@ -1461,7 +1465,27 @@ def sparseFit(subs, lines, minWordLen=None, ngrams=None):
         if max(abs((a - a2) * t + b - b2) for t in (first, last)) > 2 * sparseTolerance:
             logger.info('sparse dialogue: %.6fx%+.3f fits as many lines, no clear answer', a2, b2)
             return None
-    return a, b, agree
+    return sparseRefine(subs, lines, a, b, agree)
+
+
+def sparseRefine(subs, lines, a, b, agree):
+    """Offset measured on every subtitle line with exactly one transcript
+    line starting within `sparseTolerance` of where the formula puts it (the
+    next one at least `leadClear` farther), when there are at least
+    `sparseMinLines`; otherwise the result of `sparseFit` is kept."""
+    starts = sorted(l[0] for l in lines)
+    near = []
+    for s in subs:
+        at = a * s[0] + b
+        found = sorted((abs(w - at), w) for w in starts if abs(w - at) <= sparseTolerance)
+        if found and (len(found) == 1 or found[1][0] - found[0][0] >= leadClear):
+            near.append((s[0], found[0][1]))
+    if len(near) < sparseMinLines:
+        return a, b, agree
+    refined = _median([ w - a * s for s, w in near ])
+    logger.info('sparse dialogue: offset %+.3f measured on %i lines, was %+.3f from %i',
+            refined, len(near), b, len(agree))
+    return a, refined, near
 
 
 def sparseShift(agree, speech, target=None):
