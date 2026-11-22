@@ -329,8 +329,8 @@ jobs:
         shell: bash
         run: python -m pip install -c .github/constraints.txt av
 
-      # the same command anyone can run (doc/development.md); both films are
-      # tested even when the first fails
+      # the same command anyone can run (doc/development.md); every film and
+      # watch mode are tested even when one fails
       - name: End-to-end tests
         shell: bash
         run: python tests/run_all.py e2e --films all --app app/subsync-cmd.exe
@@ -346,6 +346,8 @@ jobs:
             e2e-data/work/sita/*.log
             e2e-data/work/sintel
             e2e-data/work/tears-of-steel-vfr
+            e2e-data/work/watch
+            !e2e-data/work/watch/library/**/*.mov
             e2e-data/temp/*/subsync-transcripts
 
   e2e-linux:
@@ -408,6 +410,8 @@ jobs:
             e2e-data/work/sita/*.log
             e2e-data/work/sintel
             e2e-data/work/tears-of-steel-vfr
+            e2e-data/work/watch
+            !e2e-data/work/watch/library/**/*.mov
             e2e-data/temp/*/subsync-transcripts
 
   release:

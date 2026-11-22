@@ -65,7 +65,8 @@ The columns of the tables:
 | `python tests/run_all.py` | the unit tests only, in seconds: the timing logic on synthetic films with known right answers. They need numpy (`pip install numpy`, or add `--install`). |
 | `python tests/run_all.py all` | the unit tests and both films |
 | `python tests/run_all.py e2e --films tos` | only Tears of Steel, the quicker film (372 MB) |
-| `python tests/run_all.py e2e --films all` | also the report-only films below (674 MB more, and PyAV: `pip install av`) |
+| `python tests/run_all.py e2e --films watch` | watch mode for home servers: a small library made of Tears of Steel, with `watch --once` run after each change (see below) |
+| `python tests/run_all.py e2e --films all` | also watch mode and the report-only films below (674 MB more, and PyAV: `pip install av`) |
 | `python tests/run_all.py e2e --release 0.20` | test an older release |
 | `python tests/run_all.py e2e --app dist/subsync/subsync-cmd.exe` | test the app you built |
 | `python tests/run_all.py e2e --app "python run.py"` | test the app run from source |
@@ -73,12 +74,14 @@ The columns of the tables:
 
 The start of a unit test run says which optional parts it found: with PyAV, faster-whisper and the built SubSync engine, more unit tests run; without them, those are skipped, not failed. GitHub Actions runs the unit tests on every push and the end-to-end tests before every release, with this same command.
 
+**Watch mode** (`--films watch`) makes a small media library with a copy of Tears of Steel and runs `subsync-cmd --cli watch --once` four times: on the first start with only the video there (nothing is synced); after its Spanish subtitles arrive, mistimed (they are synced in place, every line within 0.2 s, the original kept as `.orig`, and a subtitle without a language in its name left alone); once more (nothing is synced again); and after the video is replaced (synced again from the kept original). It fails the run if any step doesn't do that, and GitHub Actions runs it before every release.
+
 **Report-only films** show their results as REPORT but never fail a run or a release, until they've run on both systems for a while. GitHub Actions runs them before every release too.
 
 | Film | What it tests | Result now |
 |---|---|---|
 | **Tears of Steel, variable frame rate** (`--films tos-vfr`) | the film converted on your computer so its frame rate changes every few seconds (24, 12 and 16 frames per second), as in phone and screen recordings; English and Spanish subtitles. SubSync times `.srt` subtitles by the audio, so this checks that it reads such a file correctly. | both languages: every line within 0.2 s |
-| **[Sintel](https://durian.blender.org)** (Blender Foundation, CC BY 3.0, 15 minutes; `--films sintel`) | very little dialogue (26 lines) and much music; its official Japanese, French, Dutch, Russian, Chinese and Czech subtitles on the English audio, mistimed as 25 fps on the 24 fps film plus 2.5 s | no file saved in any language: Whisper hears only 14 short lines in the whole film, too few to confirm the timing, so SubSync saves nothing rather than guess |
+| **[Sintel](https://durian.blender.org)** (Blender Foundation, CC BY 3.0, 15 minutes; `--films sintel`) | very little dialogue (26 lines) and much music; its official Japanese, French, Dutch, Russian, Chinese and Czech subtitles on the English audio, mistimed as 25 fps on the 24 fps film plus 2.5 s | French, Russian and Chinese: every line within 0.2 s; Dutch and Czech: every spoken line (the other line is broken in the Dutch file, a translator credit in the Czech one); Japanese: no file saved. Whisper hears only 14 short lines in the whole film, so SubSync times them by their words (see the CHANGELOG) |
 
 ## Building
 

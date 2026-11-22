@@ -26,8 +26,9 @@ options:
     --app PATH       test this app instead of the latest release, e.g.
                      dist/subsync/subsync-cmd.exe, or "python run.py"
     --release TAG    test this release instead of the latest, e.g. 0.20
-    --films LIST     tos, sita (the default, these two gate releases), and
-                     the report-only films sintel and tos-vfr; all = every film
+    --films LIST     tos, sita (the default, these two gate releases), watch
+                     (watch mode on Tears of Steel, also gates releases), and
+                     the report-only films sintel and tos-vfr; all = all of them
     --data DIR       downloads and results (default e2e-data)
     --install        first install the unit tests' packages, at the versions
                      the release builds use (.github/constraints.txt)
@@ -60,6 +61,8 @@ FILMS = {
     'sita': ('Sita Sings the Blues', 'tests/e2e/sita_sings_the_blues.py', 'sita', False),
     'sintel': ('Sintel', 'tests/e2e/more_films.py', 'sintel', True),
     'tos-vfr': ('Tears of Steel, VFR', 'tests/e2e/more_films.py', 'tears-of-steel-vfr', True),
+    # watch mode on a small library made of Tears of Steel (judged)
+    'watch': ('Watch mode', 'tests/e2e/watch_mode.py', 'tears-of-steel', False),
 }
 TEST_PACKAGES = ['numpy', 'av', 'faster-whisper']
 
@@ -295,9 +298,11 @@ def runFilm(key, app, data, temp):
     heading(name)
     env = dict(os.environ, TEMP=temp, TMP=temp, TMPDIR=temp)
     start = time.time()
+    # watch mode uses Tears of Steel's data, with a work folder of its own
+    work = os.path.join(data, 'work', key if script.endswith('watch_mode.py') else sub)
     cmd = [sys.executable, os.path.join(ROOT, script), '--app', app,
            '--data', os.path.join(data, sub),
-           '--work', os.path.join(data, 'work', sub), '--download']
+           '--work', work, '--download']
     if script.endswith('more_films.py'):
         cmd += ['--film', key]
     code = subprocess.call(cmd, env=env)
