@@ -289,6 +289,45 @@ class WatchTest(unittest.TestCase):
         self.assertEqual(self.lib.read('Movie.en.srt.orig'), 'original', 'the original stays')
         self.assertFalse([ f for f in os.listdir(self.lib.root) if f.startswith(watch.TMP) ])
 
+    def test_failed_resync_keeps_syncing_from_the_original(self):
+        # synced, then the video is replaced and the re-sync fails: the next
+        # replacement must still sync from the original, not from the
+        # subtitle synced to the first video (and must not overwrite .orig)
+        self.lib.add('Movie.mkv')
+        self.lib.run()
+        self.lib.add('Movie.en.srt')
+        self.lib.run()
+        self.lib.add('Movie.mkv', text='release 2')
+        self.lib.run(syncFn=lambda sub, video, lang, out: False)
+        self.assertEqual(self.lib.status('Movie.en.srt'), 'failed')
+        self.lib.add('Movie.mkv', text='release 3, longer')
+        self.lib.run()
+        self.assertEqual(self.lib.read('Movie.en.srt'), 'synced: original', 'from the original')
+        self.assertEqual(self.lib.read('Movie.en.srt.orig'), 'original', 'the original stays')
+
+    def test_resync_that_couldnt_run_keeps_syncing_from_the_original(self):
+        def noModels(sub, video, lang, out):
+            raise watch.Retry("the models it needs couldn't be downloaded")
+
+        now = time.time()
+        self.lib.add('Movie.mkv')
+        self.lib.run()
+        self.lib.add('Movie.en.srt')
+        self.lib.run()
+        self.lib.add('Movie.mkv', text='release 2')
+        self.lib.run(syncFn=noModels, clock=lambda: now)
+        self.lib.run(clock=lambda: now + watch.RETRY + 1)
+        self.assertEqual(self.lib.read('Movie.en.srt'), 'synced: original')
+        self.assertEqual(self.lib.read('Movie.en.srt.orig'), 'original')
+
+    def test_overlapping_folders_sync_once(self):
+        self.lib.add('Movies/Movie.mkv')
+        self.lib.run()
+        self.lib.add('Movies/Movie.en.srt')
+        watch.watch([ self.lib.root, os.path.join(self.lib.root, 'Movies') ], self.lib.state,
+                    self.lib.sync, langFn, once=True, log=lambda msg: None, settle=120)
+        self.assertEqual(len(self.lib.synced), 1)
+
     def test_video_still_being_replaced_waits(self):
         self.lib.add('Movie.mkv')
         self.lib.run()

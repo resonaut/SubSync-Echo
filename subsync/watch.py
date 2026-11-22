@@ -88,9 +88,11 @@ def langFromName(subName, videoName, langFn):
 
 
 def scan(dirs):
-    """Every subtitle in dirs and their subfolders, with its video or None.
-    Hidden files and folders, kept originals and SubSync's temporary files are
+    """Every subtitle in dirs and their subfolders, with its video or None,
+    once also when the folders overlap (/media and /media/Movies). Hidden
+    files and folders, kept originals and SubSync's temporary files are
     skipped."""
+    seen = set()
     for top in dirs:
         for folder, subdirs, files in os.walk(top):
             subdirs[:] = sorted(d for d in subdirs if not d.startswith('.'))
@@ -98,13 +100,25 @@ def scan(dirs):
             for name in sorted(files):
                 if name.startswith('.') or name.startswith(TMP) or not name.lower().endswith(SUB_EXTS):
                     continue
+                path = os.path.join(folder, name)
+                key = os.path.normcase(os.path.realpath(path))
+                if key in seen:
+                    continue
+                seen.add(key)
                 video = videoFor(name, videos)
-                yield os.path.join(folder, name), os.path.join(folder, video) if video else None
+                yield path, os.path.join(folder, video) if video else None
 
 
 def fingerprint(path):
     st = os.stat(path)
     return [ st.st_size, st.st_mtime_ns ]
+
+
+def isOurs(rec):
+    """Whether the subtitle recorded in rec is SubSync's own result, with its
+    original kept as .orig (records written before 'ours' was kept: those
+    with status synced)."""
+    return bool(rec.get('ours')) or rec.get('status') == 'synced'
 
 
 def videoPrint(video):
@@ -151,9 +165,16 @@ class State(object):
         self.files[os.path.abspath(new)] = self.files.pop(old)
 
     def set(self, sub, fp, status, **info):
+        """Records what happened to a subtitle. SubSync's own result stays
+        marked as such ('ours') while the file is unchanged, also when a
+        later sync of it fails or can't run."""
+        key = os.path.abspath(sub)
+        prev = self.files.get(key)
+        if 'ours' not in info and prev and prev['fp'] == fp and isOurs(prev):
+            info['ours'] = True
         rec = dict(info, fp=fp, status=status,
                    at=datetime.datetime.now().replace(microsecond=0).isoformat())
-        self.files[os.path.abspath(sub)] = rec
+        self.files[key] = rec
         return rec
 
     def save(self):
@@ -248,8 +269,9 @@ def syncOne(sub, video, lang, syncFn, state):
     src = os.path.join(folder, TMP + 'orig-' + name)
     fp = fingerprint(sub)
     rec = state.get(sub)
-    again = bool(rec) and rec['status'] == 'synced' and rec['fp'] == fp \
-        and os.path.exists(sub + ORIG)
+    # SubSync's own result, unchanged since: synced again from the original,
+    # also after an earlier attempt failed or couldn't run
+    again = bool(rec) and rec['fp'] == fp and isOurs(rec) and os.path.exists(sub + ORIG)
     try:
         open(tmp, 'w').close()      # can it write here? (before minutes of work)
         os.remove(tmp)              # (the app wouldn't overwrite it)
@@ -269,7 +291,7 @@ def syncOne(sub, video, lang, syncFn, state):
                     os.replace(sub + ORIG, sub)     # put the subtitle back
                 raise
             return state.set(sub, fingerprint(sub), 'synced', video=video,
-                             vfp=videoPrint(video), lang=lang)
+                             vfp=videoPrint(video), lang=lang, ours=True)
         return state.set(sub, fp, 'failed', video=video, vfp=videoPrint(video), lang=lang,
                          note="couldn't be synced; tried again when it or its video changes")
     finally:
