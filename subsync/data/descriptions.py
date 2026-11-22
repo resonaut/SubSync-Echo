@@ -57,6 +57,13 @@ cmdopts = {
 'batch':                   _('open batch processing window'),
 
 'sync':                    _('define synchronization task, can be repeated multiple times'),
+'watch':                   _('watch media folders and sync subtitles that arrive next to their videos (Movie.en.srt next to Movie.mkv); the original is kept as .orig'),
+'watch.dir':               _('folder to watch, with its subfolders; can be repeated'),
+'watch.interval':          _('seconds between scans (default 60)'),
+'watch.settle':            _('sync a subtitle once it and its video have not changed for this many seconds (default 120)'),
+'watch.state':             _('file that remembers what was synced (default watch-state.json in the settings folder)'),
+'watch.existing':          _('also sync subtitles that were already there on the first start'),
+'watch.once':              _('scan once, sync what is ready and exit (for cron)'),
 'sync.sub.path':           _('path to subtitle file'),
 'sync.sub.stream':         _('subtitle stream no'),
 'sync.sub.streamByLang':   _('select subtitle stream by language (3-letter ISO code)'),

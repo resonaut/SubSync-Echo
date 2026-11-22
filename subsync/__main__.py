@@ -88,7 +88,7 @@ def gui(sync=None, fromFile=None, batch=False, options={}, **args):
         settings().save()
 
 
-def cli(sync=None, fromFile=None, verbose=1, offline=False, options={}, **args):
+def cli(sync=None, fromFile=None, verbose=1, offline=False, options={}, watch=None, **args):
     from subsync import cli
 
     if sys.platform == 'win32':
@@ -100,6 +100,16 @@ def cli(sync=None, fromFile=None, verbose=1, offline=False, options={}, **args):
             sys.stdin = open('CONIN$', 'r')
         except Exception as err:
             cli.pr.printException(0, err, 'console allocation failed')
+
+    if watch:
+        try:
+            _init(options)
+            from subsync import watch as watchMode
+            return watchMode.run(watch, verbosity=verbose, offline=offline)
+        except Exception as err:
+            cli.pr.printException(0, err)
+            logger.error('watch failed, %r', err, exc_info=True)
+            return 1
 
     try:
         _init(options)

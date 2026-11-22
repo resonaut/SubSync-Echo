@@ -223,6 +223,16 @@ def options():
             { 'group': 'out', 'name': 'fps', 'alias': '--out-fps', 'type': float },
         ]},
 
+        _('Watch folders (home servers):'),
+        { 'name': 'watch', 'parser': parseCmd, 'alias': 'watch', 'opts': [
+            { 'name': 'dir', 'alias': '--dir', 'metavar': 'PATH', 'multiple': True, 'required': True },
+            { 'name': 'interval', 'type': float, 'metavar': 'SECONDS' },
+            { 'name': 'settle', 'type': float, 'metavar': 'SECONDS' },
+            { 'name': 'state', 'metavar': 'PATH' },
+            { 'name': 'existing', 'parser': parseConst },
+            { 'name': 'once', 'parser': parseConst },
+        ]},
+
         _('Synchronization options:'),
         { 'name': 'fromFile', 'alias': '--import', 'metavar': 'PATH' },
         { 'group': 'options', 'name': 'minEffort', 'alias': '--effort', 'type': float },

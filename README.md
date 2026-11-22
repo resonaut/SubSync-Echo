@@ -171,7 +171,7 @@ Subtitle makers time lines differently: some show a line just before people spea
 <details>
 <summary><b>Can it sync subtitles on my media server (Jellyfin, Plex, Emby) automatically?</b></summary>
 
-*Not yet.* A home-server version that watches your media folders is planned for a later release; it isn't built. Today you can sync from the command line (see [For advanced users](#for-advanced-users)).
+Yes, from 0.21. **Watch mode** keeps an eye on your media folders and syncs each new subtitle placed next to its video (`Movie.en.srt` next to `Movie.mkv`), keeping the original as `.orig`. **Bazarr** users can have Bazarr run SubSync Echo after each subtitle it downloads. [doc/home-server.md](doc/home-server.md) shows how, including running it as a service. It runs on Windows and on Linux (x86-64); *a build for ARM computers such as the Raspberry Pi and a Docker image are planned, not built yet.*
 
 </details>
 
@@ -233,6 +233,8 @@ subsync-cmd.exe --cli sync --sub movie.en.srt --sub-lang=eng --ref movie.mkv --r
 Run `subsync-cmd.exe --help` for all options.
 
 **Another Whisper model:** SubSync uses Whisper's `small` model. To try another one, set the environment variable `SUBSYNC_WHISPER_MODEL` to its size (for example `medium`) before starting SubSync. Smaller models aren't faster here: `tiny` (75 MB) failed to sync all 4 films it was tested on, and `base` (145 MB) failed 1 of 4 and was slower than `small` on the rest, because SubSync needed more parts of the film before it could confirm the timing.
+
+**Home server** (from 0.21): sync subtitles automatically as they arrive, with watch mode or from Bazarr; see [doc/home-server.md](doc/home-server.md).
 
 **Building from source and running the tests:** see [doc/development.md](doc/development.md). Unit tests run on every build; two end-to-end tests on free films run on both packages before every release, and a release is published only when they pass.
 
