@@ -215,11 +215,17 @@ class RefFile(InputFile):
         super().__init__(*args, **kw)
 
 
+# words media servers (Jellyfin, Plex, Emby) and Bazarr put after the language
+# in subtitle names; "hi" means hearing impaired there (Hindi isn't supported)
+nameFlags = { 'forced', 'sdh', 'cc', 'hi', 'default', 'full', 'signs', 'songs', 'foreign' }
+
+
 def getLangFromPath(path):
     """Get language code from file name.
 
     Reads 2- or 3-letter language code from file name, if code is present as
-    last thing before file extension.
+    last thing before file extension. Words media servers add after the
+    language (forced, sdh, cc, hi, default...) are skipped.
 
     Returns
     -------
@@ -230,9 +236,15 @@ def getLangFromPath(path):
     --------
     - `subtitles.eng.srt` - eng
     - `subtitles-fr.srt` - fre
+    - `Movie.en.forced.srt` - eng
     """
 
     name = path.rsplit('.', 1)[0]
+    while True:
+        cut = max(name.rfind('.'), name.rfind('-'), name.rfind('_'))
+        if cut <= 0 or name[cut+1:].lower() not in nameFlags:
+            break
+        name = name[:cut]
     size = 0
 
     for c in reversed(name):
