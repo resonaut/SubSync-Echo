@@ -24,6 +24,8 @@ How it works:
     subtitle is tried again an hour later;
   - a subtitle renamed or moved within the library (as Radarr and Sonarr do)
     isn't synced again, and its kept original follows it;
+  - when the video is replaced (a better release, which may have another
+    frame rate or cut), the subtitle is synced again from its kept original;
   - on the first start, subtitles already in the library are only noted, not
     synced, unless --existing is given.
 
@@ -34,6 +36,7 @@ itself is passed in (see run()), so they can be tested without the engine.
 import datetime
 import json
 import os
+import shutil
 import time
 
 SUB_EXTS = ('.srt', '.ass', '.ssa')
@@ -104,6 +107,23 @@ def fingerprint(path):
     return [ st.st_size, st.st_mtime_ns ]
 
 
+def videoPrint(video):
+    """fingerprint of the video, None when there is none (or it's gone)."""
+    try:
+        return fingerprint(video) if video else None
+    except OSError:
+        return None
+
+
+def videoChanged(rec, video, vfp):
+    """Whether the subtitle's video was replaced since rec was written. State
+    files written before videos were recorded have no 'vfp': nothing is
+    known, the video is recorded now (see plan)."""
+    if video is None or 'vfp' not in rec:
+        return False
+    return rec.get('video') != video or rec['vfp'] != vfp
+
+
 def settled(path, now, settle):
     """True when the file hasn't changed for settle seconds."""
     return now - os.stat(path).st_mtime >= settle
@@ -151,8 +171,9 @@ class State(object):
 def plan(dirs, state, now, settle, existing, langFn):
     """Looks at every subtitle once. Returns the ones to sync now, as
     (subtitle, video, language), and records the others that need no sync
-    in state. Subtitles still changing, or whose video is missing or still
-    changing, are left for a later look."""
+    in state. A subtitle is synced when it is new or changed, or when its
+    video was replaced. Subtitles still changing, or whose video is missing
+    or still changing, are left for a later look."""
     todo = []
     baseline = state.isNew and not existing
     known = { tuple(rec['fp']): path for path, rec in state.files.items() }
@@ -161,38 +182,50 @@ def plan(dirs, state, now, settle, existing, langFn):
             fp = fingerprint(sub)
         except OSError:
             continue        # removed meanwhile
+        vfp = videoPrint(video)
         rec = state.get(sub)
         if rec and rec['fp'] == fp:
-            if rec['status'] != 'error' or now < rec.get('retry', 0):
+            retry = rec['status'] == 'error' and now >= rec.get('retry', 0)
+            if not retry and not videoChanged(rec, video, vfp):
+                if 'vfp' not in rec and rec.get('video') == video:
+                    rec['vfp'] = vfp    # written before videos were recorded
                 continue    # synced, noted or refused already, unchanged since
-        elif rec is None and moved(known.get(tuple(fp)), sub, state):
+        elif rec is None and moved(known.get(tuple(fp)), sub, state, video, vfp):
             continue        # renamed or moved, same file
         if baseline:
-            state.set(sub, fp, 'existing')
+            state.set(sub, fp, 'existing', video=video, vfp=vfp)
             continue
         if video is None:
             continue        # its video may still arrive
         try:
-            if not settled(sub, now, settle) or not settled(video, now, settle):
+            # an unchanged subtitle (its video was replaced) needn't settle:
+            # it may be SubSync's own result, written a moment ago
+            unchanged = rec is not None and rec['fp'] == fp
+            if not (unchanged or settled(sub, now, settle)) or not settled(video, now, settle):
                 continue
         except OSError:
             continue
         lang = langFromName(os.path.basename(sub), os.path.basename(video), langFn)
         if lang is None:
-            state.set(sub, fp, 'skipped', video=video,
+            state.set(sub, fp, 'skipped', video=video, vfp=vfp,
                       note='no language in the file name, such as Movie.en.srt')
             continue
         todo.append((sub, video, lang))
     return todo
 
 
-def moved(old, new, state):
+def moved(old, new, state, video=None, vfp=None):
     """When a subtitle seen before under the name old (same size and time)
     is now at new and no longer at old, it was renamed or moved: its record
-    follows it, and so does its kept original. Returns True then."""
+    follows it, and so does its kept original. When its video was renamed
+    with it (same size and time), the record follows that too. Returns True
+    then."""
     if old is None or os.path.exists(old):
         return False
     state.move(old, new)
+    rec = state.get(new)
+    if video and rec.get('vfp') == vfp:
+        rec['video'] = video
     if os.path.exists(old + ORIG) and not os.path.exists(new + ORIG):
         try:
             os.replace(old + ORIG, new + ORIG)
@@ -205,30 +238,44 @@ def syncOne(sub, video, lang, syncFn, state):
     """Syncs one subtitle with syncFn(sub, video, lang, out) -> bool, which
     writes the result to out. On success the result replaces the subtitle and
     the original is kept as <subtitle>.orig (replacing an older one: it is the
-    original of what is there now). Returns the state record."""
+    original of what is there now). A subtitle SubSync synced before whose
+    video was replaced is synced again from its kept original, which stays.
+    Returns the state record."""
     folder, name = os.path.split(sub)
     tmp = os.path.join(folder, TMP + name)
+    # the kept original, under a name with the subtitle's own extension
+    # (the app tells the format from it)
+    src = os.path.join(folder, TMP + 'orig-' + name)
     fp = fingerprint(sub)
+    rec = state.get(sub)
+    again = bool(rec) and rec['status'] == 'synced' and rec['fp'] == fp \
+        and os.path.exists(sub + ORIG)
     try:
         open(tmp, 'w').close()      # can it write here? (before minutes of work)
         os.remove(tmp)              # (the app wouldn't overwrite it)
-        ok = syncFn(sub, video, lang, tmp)
+        if again:
+            shutil.copyfile(sub + ORIG, src)
+        ok = syncFn(src if again else sub, video, lang, tmp)
         if ok and os.path.exists(tmp) and os.path.getsize(tmp) > 0:
             if fingerprint(sub) != fp:
                 # replaced while syncing (a new download): try that one later
                 return state.get(sub)
-            os.replace(sub, sub + ORIG)
+            if not again:
+                os.replace(sub, sub + ORIG)
             try:
                 os.replace(tmp, sub)
             except OSError:
-                os.replace(sub + ORIG, sub)     # put the subtitle back
+                if not again:
+                    os.replace(sub + ORIG, sub)     # put the subtitle back
                 raise
-            return state.set(sub, fingerprint(sub), 'synced', video=video, lang=lang)
-        return state.set(sub, fp, 'failed', video=video, lang=lang,
-                         note="couldn't be synced; tried again when the file changes")
+            return state.set(sub, fingerprint(sub), 'synced', video=video,
+                             vfp=videoPrint(video), lang=lang)
+        return state.set(sub, fp, 'failed', video=video, vfp=videoPrint(video), lang=lang,
+                         note="couldn't be synced; tried again when it or its video changes")
     finally:
-        if os.path.exists(tmp):
-            os.remove(tmp)
+        for path in (tmp, src):
+            if os.path.exists(path):
+                os.remove(path)
 
 
 def cleanTemp(dirs):
@@ -278,7 +325,7 @@ def watch(dirs, statePath, syncFn, langFn, interval=60, settle=120, existing=Fal
             if rec and rec['status'] == 'synced':
                 log('[+] synced {} (original kept as {})'.format(sub, os.path.basename(sub) + ORIG))
             elif rec and rec['status'] == 'failed':
-                log("[-] couldn't sync {}; tried again when the file changes".format(sub))
+                log("[-] couldn't sync {}; tried again when it or its video changes".format(sub))
         if once:
             return 0
         sleep(interval)

@@ -32,6 +32,7 @@ What it does:
 - When a subtitle can't be synced (for example a film with very little speech), the file is left as it was and tried again only when it changes, for instance when a new one is downloaded.
 - When it can't run at all because the models it needs couldn't be downloaded (no internet yet), it tries again an hour later.
 - A subtitle renamed or moved within the library, as Radarr and Sonarr do when they rename a film, isn't synced again, and its `.orig` file follows it.
+- When a video is replaced, for example by a better release (which may have another frame rate or cut), its subtitle is synced again from the kept `.orig`, which stays as it is.
 - A state file remembers what it did, so nothing is synced twice and SubSync's own results aren't synced again. It's kept as `watch-state.json` in the settings folder (`~/.config/subsync` on Linux), or where `--state` says.
 - **On the first start, subtitles already in your library are only noted, not synced.** Only subtitles that arrive or change afterwards are synced. To sync the whole library once, add `--existing` (at 1.5–2.5 minutes per film, a big library takes a long time).
 

@@ -246,7 +246,8 @@ class WatchTest(unittest.TestCase):
                           ('Movie.en.srt', 'Movie (2010)/Movie (2010).en.srt') ]:
             os.rename(os.path.join(self.lib.root, old), os.path.join(self.lib.root, new))
         self.lib.run()
-        self.assertEqual(len(self.lib.synced), 1)
+        self.lib.run()
+        self.assertEqual(len(self.lib.synced), 1, 'not even when the video was renamed too')
         self.assertEqual(self.lib.read('Movie (2010)/Movie (2010).en.srt.orig'), 'original', 'the original follows it')
         self.assertEqual(self.lib.status(os.path.join('Movie (2010)', 'Movie (2010).en.srt')), 'synced')
 
@@ -274,6 +275,58 @@ class WatchTest(unittest.TestCase):
         self.assertEqual(self.lib.read('Movie.en.srt'), 'original')
         self.assertFalse(self.lib.exists('Movie.en.srt.orig'))
         self.assertEqual(self.lib.status('Movie.en.srt'), 'failed')
+
+    def test_replaced_video_syncs_again_from_the_original(self):
+        self.lib.add('Movie.mkv')
+        self.lib.run()
+        self.lib.add('Movie.en.srt')
+        self.lib.run()
+        self.lib.add('Movie.mkv', text='a better release')
+        self.lib.run()
+        self.lib.run()
+        self.assertEqual(len(self.lib.synced), 2, 'synced again once')
+        self.assertEqual(self.lib.read('Movie.en.srt'), 'synced: original', 'from the original')
+        self.assertEqual(self.lib.read('Movie.en.srt.orig'), 'original', 'the original stays')
+        self.assertFalse([ f for f in os.listdir(self.lib.root) if f.startswith(watch.TMP) ])
+
+    def test_video_still_being_replaced_waits(self):
+        self.lib.add('Movie.mkv')
+        self.lib.run()
+        self.lib.add('Movie.en.srt')
+        self.lib.run()
+        self.lib.add('Movie.mkv', text='a better release', age=time.time() - 10)
+        self.lib.run()
+        self.assertEqual(len(self.lib.synced), 1)
+        os.utime(os.path.join(self.lib.root, 'Movie.mkv'), (OLD, OLD))
+        self.lib.run()
+        self.assertEqual(len(self.lib.synced), 2)
+
+    def test_replaced_video_syncs_a_subtitle_noted_on_the_first_start(self):
+        self.lib.add('Movie.mkv')
+        self.lib.add('Movie.en.srt')
+        self.lib.run()
+        self.assertEqual(self.lib.synced, [])
+        self.lib.add('Movie.mkv', text='a better release')
+        self.lib.run()
+        self.assertEqual(self.lib.read('Movie.en.srt'), 'synced: original')
+        self.assertEqual(self.lib.read('Movie.en.srt.orig'), 'original')
+
+    def test_state_files_without_videos_learn_them(self):
+        self.lib.add('Movie.mkv')
+        self.lib.run()
+        self.lib.add('Movie.en.srt')
+        self.lib.run()
+        with open(self.lib.state, encoding='utf-8') as fp:
+            data = json.load(fp)
+        for rec in data['files'].values():
+            del rec['vfp']                      # as written before 0.21's fix
+        with open(self.lib.state, 'w', encoding='utf-8') as fp:
+            json.dump(data, fp)
+        self.lib.run()
+        self.assertEqual(len(self.lib.synced), 1, 'nothing known about the video yet')
+        self.lib.add('Movie.mkv', text='a better release')
+        self.lib.run()
+        self.assertEqual(len(self.lib.synced), 2, 'recorded on the look before')
 
     def test_hidden_kept_and_temporary_files_are_ignored(self):
         self.lib.add('Movie.mkv')
