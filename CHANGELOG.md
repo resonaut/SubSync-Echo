@@ -7,7 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Add
 ## [Unreleased]
 
 ### Highlights
-- **Subtitles synced automatically on your media server.** Watch mode keeps an eye on your Jellyfin, Plex or Emby folders and syncs each new subtitle as it arrives, keeping the original next to it. Bazarr can also run SubSync Echo after every subtitle it downloads. See the [home server guide](doc/home-server.md).
+- **Subtitles synced automatically on your media server.** Watch mode keeps an eye on your Jellyfin, Plex or Emby folders and syncs each new subtitle as it arrives, keeping the original next to it. It also comes as a Docker image, and Bazarr can run SubSync Echo after every subtitle it downloads. See the [home server guide](doc/home-server.md).
 - **Films with very little dialogue can now be synced.** Sintel, a 15-minute film with only 26 lines and much music, now syncs in 5 of its 6 subtitle languages, where it synced in none before.
 - **More precise English films.** The timing is now checked against the speech in the whole film: 7 of 11 English test films came out with every line within 0.2 seconds (one of them was at 65% before). Songs and long sentences no longer make SubSync refuse subtitles that are right.
 - **Easier to trust and to start with.** Every download comes with a checksum, a shorter README and a new user guide explain it in plain words, and anyone can rerun the accuracy tests with one command.
