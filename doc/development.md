@@ -95,6 +95,8 @@ Windows and Linux packages are built by GitHub Actions; see [.github/workflows/b
 
 The tag builds the packages and the Docker image ([docker/Dockerfile](../docker/Dockerfile), made from the Linux package), runs the end-to-end tests on both packages and the watch mode test inside the image, and publishes a release and the image (`ghcr.io/resonaut/subsync-echo`, tagged with the version and `latest`) only when they pass. Its page ([.github/release-notes.md](../.github/release-notes.md)) shows the version's highlights and links to its whole section of the changelog for everything else. A tag without a changelog section, or a section without highlights, stops before building.
 
+**WinGet**, once the release is published: `python .github/winget_manifests.py 0.21` writes the three WinGet files for it into `winget/manifests/r/resonaut/SubSyncEcho/0.21/`, with the address and SHA-256 of the release's Windows zip (taken from GitHub, nothing is downloaded). WinGet installs that zip as a portable app with the commands `subsync` and `subsync-cmd`. Check the files with `winget validate --manifest <that folder>`, then copy the folder into a fork of [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) and open a pull request there; once Microsoft's checks pass and it's merged, `winget install resonaut.SubSyncEcho` works.
+
 ## The icon
 
 The app's icon is drawn in two SVG files: [resources/subsync.svg](../resources/subsync.svg), the full design, used from 64 px, and [resources/subsync-small.svg](../resources/subsync-small.svg), a bolder version for 16–48 px, where fine lines blur. The Windows `.ico`, the macOS `.icns` and the app's PNG images (`subsync/img/icon.png` from the small drawing, `logo.png` from the full one) are made from them.
