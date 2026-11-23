@@ -510,6 +510,33 @@ class SparseDialogueTest(unittest.TestCase):
         self.assertAlmostEqual(t.sparseShift(agree, speech[:2], 0.15), -0.15,
                 msg='too few speech starts: lines start target before the words')
 
+    def test_merged_segments_split_into_sentences(self):
+        # Whisper on one computer put three spoken lines in one segment; the
+        # words keep their own times, so each sentence starts at its word
+        words = [ (0.0, 0.3, " You're"), (0.3, 0.6, ' lucky'), (0.6, 1.4, ' still flowing.'),
+                  (4.3, 4.8, ' Thank'), (4.8, 5.1, ' you.'), (6.0, 6.2, ' So'),
+                  (7.9, 8.2, ' what'), (8.2, 8.9, ' brings you?') ]
+        self.assertEqual(t.wordLines(words, 100.0), [
+            (100.0, 101.4, "You're lucky still flowing."),
+            (104.3, 105.1, 'Thank you.'),
+            (106.0, 106.2, 'So'),                   # a pause of 1.7 s follows
+            (107.9, 108.9, 'what brings you?') ])
+
+    def test_merged_segments_pair_like_split_ones(self):
+        # the same film, transcribed with lines merged as on that computer:
+        # split into sentences, the lines pair and fit as before
+        subs, lines = self.film(outlier=None)
+        merged = []
+        for a, b in zip(lines[0::2], lines[1::2] + [ None ]):
+            words = [ (a[0], a[0] + 1.0, a[2] + '.') ]
+            if b:
+                words.append((b[0], b[0] + 1.0, b[2] + '.'))
+            merged += t.wordLines(words)
+        self.assertEqual(len(merged), len(lines))
+        res = t.sparseFit(mistime(subs, 25 / 24, 2.5), merged)
+        self.assertIsNotNone(res)
+        self.assertAlmostEqual(res[0], 25 / 24, places=6)
+
     def test_windows_joined(self):
         lines = [ (10.0, 12.0, 'a'), (14.0, 15.0, 'b'), (40.0, 41.0, 'c'), (1.0, 2.0, 'd') ]   # d's range ends at 5 s, a's starts at 7 s
         self.assertEqual(t.sparseWindows(lines, duration=42.5),

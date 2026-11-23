@@ -209,6 +209,7 @@ sparseTolerance = 1.0
 sparseMargin = 3.0
 sparseMinOnsets = 3     # speech starts needed to correct word times
 sparseCutLines = 2      # paired lines agreeing on another offset: another cut
+sparsePause = 0.8       # seconds between words that end a line (see wordLines)
 
 
 class Terminated(Exception):
@@ -821,7 +822,8 @@ def transcribeWords(whisper, path, streamNo, ranges, lang, translate=False,
     Returns
     -------
     list of (float, float, str)
-        Lines from the start of their first word to the end of their last.
+        Lines from the start of their first word to the end of their last,
+        split into sentences (see `wordLines`).
     """
     lines = []
     for start, end in ranges:
@@ -836,11 +838,37 @@ def transcribeWords(whisper, path, streamNo, ranges, lang, translate=False,
         for segment in segments:
             if runCb and not runCb():
                 raise Terminated()
-            text = ' '.join(segment.text.split())
-            words = [ w for w in segment.words or [] if w.end > w.start ]
-            if text and words:
-                lines.append((start + words[0].start, start + words[-1].end, text))
+            words = [ (w.start, w.end, w.word) for w in segment.words or [] if w.end > w.start ]
+            lines += wordLines(words, start)
     return sorted(lines)
+
+
+def wordLines(words, offset=0.0):
+    """Lines of one Whisper segment from its timed words: a new line starts
+    after a word ending a sentence (. ? !) and at a pause of `sparsePause`
+    seconds or more. Whisper sometimes puts two or three spoken lines in one
+    segment, and how it groups them differs between computers; split, every
+    sentence keeps the time of its own first word.
+
+    words is a list of (start, end, text) tuples, times from `offset`.
+    """
+    lines, current = [], []
+
+    def close():
+        text = ' '.join(' '.join(w[2] for w in current).split())
+        if text:
+            lines.append((offset + current[0][0], offset + current[-1][1], text))
+        del current[:]
+
+    for word in words:
+        if current and word[0] - current[-1][1] >= sparsePause:
+            close()
+        current.append(word)
+        if word[2].strip().endswith(('.', '?', '!', '\u3002', '\uff1f', '\uff01')):
+            close()
+    if current:
+        close()
+    return lines
 
 
 def spreadOrder(count):
@@ -1981,7 +2009,8 @@ def getSpeech(path, streamNo, lang, channels=None, runCb=None):
 
 def wordLinesPath(outDir, ranges):
     key = ','.join('{:.3f}-{:.3f}'.format(s, e) for s, e in ranges)
-    return os.path.join(outDir, 'words-{}.srt'.format(
+    # "words2": lines split into sentences (see wordLines)
+    return os.path.join(outDir, 'words2-{}.srt'.format(
         hashlib.sha1(key.encode('utf-8')).hexdigest()[:12]))
 
 
