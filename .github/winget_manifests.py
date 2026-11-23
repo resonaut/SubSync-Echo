@@ -1,7 +1,7 @@
 """Write the WinGet manifests for a published release of SubSync Echo.
 
 WinGet installs the release's Windows zip as a portable app: it unpacks the
-zip and adds the commands `subsync` (the app) and `subsync-cmd` (command
+zip and adds the commands `subsync-echo` (the app) and `subsync-echo-cmd` (command
 line). The manifests give the zip's address and SHA-256, so they can only be
 written once the release is published; GitHub lists the SHA-256 of each
 release file, so nothing is downloaded.
@@ -21,7 +21,7 @@ import urllib.request
 
 REPO = 'resonaut/SubSync-Echo'
 PACKAGE = 'resonaut.SubSyncEcho'
-SCHEMA = '1.9.0'
+SCHEMA = '1.28.0'
 
 
 def zipFile(version):
@@ -56,9 +56,9 @@ def manifests(version, url, sha256):
             'NestedInstallerType: portable\n'
             'NestedInstallerFiles:\n'
             '- RelativeFilePath: subsync\\subsync.exe\n'
-            '  PortableCommandAlias: subsync\n'
+            '  PortableCommandAlias: subsync-echo\n'
             '- RelativeFilePath: subsync\\subsync-cmd.exe\n'
-            '  PortableCommandAlias: subsync-cmd\n'
+            '  PortableCommandAlias: subsync-echo-cmd\n'
             'MinimumOSVersion: 10.0.17763.0\n'
             'Installers:\n'
             '- Architecture: x64\n'
@@ -81,7 +81,8 @@ def manifests(version, url, sha256):
             '  is said and moves every line to the moment it is spoken: anime and other Japanese\n'
             '  films, English films, and subtitles in a different language from the audio.\n'
             '  Everything runs on your own computer, with no graphics card, and nothing is uploaded.\n'
-            'Moniker: subsync\n'
+            # sc0ty.SubSync (the original) already has the moniker subsync
+            'Moniker: subsync-echo\n'
             'Tags:\n'
             '- subtitles\n'
             '- subtitle-sync\n'
