@@ -14,7 +14,7 @@
 
 <p align="center"><sub>Tears of Steel with mistimed English subtitles (before) and synced by SubSync Echo (after). Blue marks the speech SubSync hears; the bars show when each file shows its lines.</sub></p>
 
-<p align="center"><b><a href="https://github.com/resonaut/SubSync-Echo/releases/latest">⬇ Download for Windows or Linux</a></b> · <a href="doc/guide.md">User guide</a> · <a href="CHANGELOG.md">What's new</a> · <a href="#questions">Questions</a></p>
+<p align="center"><b><a href="https://github.com/resonaut/SubSync-Echo/releases/latest">⬇ Download for Windows or Linux</a></b> · <a href="https://resonaut.github.io/SubSync-Echo/">Website</a> · <a href="doc/guide.md">User guide</a> · <a href="CHANGELOG.md">What's new</a> · <a href="#questions">Questions</a></p>
 
 ## Quick start
 
@@ -102,6 +102,7 @@ More answers are in the [user guide](doc/guide.md#more-questions).
 
 ## Learn more
 
+- [Website](https://resonaut.github.io/SubSync-Echo/): SubSync Echo on one page
 - [User guide](doc/guide.md): installing, using the app, what its messages mean, known limits, troubleshooting and the command line
 - [Home server](doc/home-server.md): watch mode, running as a service, Bazarr
 - [Test results and how it works](doc/results.md)
