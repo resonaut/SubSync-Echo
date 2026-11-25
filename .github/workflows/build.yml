@@ -12,6 +12,7 @@ on:
       - '**.md'                     # README, CHANGELOG, SECURITY, doc/, release notes
       - 'doc/**'                    # README images
       - '.github/ISSUE_TEMPLATE/**'
+      - 'docs/**'                   # the GitHub Pages website, published by Pages itself
       - 'web/**'                    # the original SubSync's browser version, not built here
       - 'snap/**'                   # snap packaging, not built here
       - '.gitignore'
