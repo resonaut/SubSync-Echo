@@ -13,7 +13,8 @@ How it works:
     and FUSE mounts too, where change notifications don't);
   - a subtitle is synced once it and its video haven't changed for --settle
     seconds, so files still being downloaded are left alone;
-  - its language comes from the file name (Movie.en.srt, Movie.eng.srt); the
+  - its language comes from the file name (Movie.en.srt, Movie.eng.srt), or,
+    when the name has none (Movie.srt), from its text when that's clear; the
     audio language is detected;
   - one subtitle is synced at a time; the result replaces the subtitle and the
     original is kept as <name>.orig;
@@ -189,12 +190,13 @@ class State(object):
         self.isNew = False
 
 
-def plan(dirs, state, now, settle, existing, langFn):
+def plan(dirs, state, now, settle, existing, langFn, textLangFn=None):
     """Looks at every subtitle once. Returns the ones to sync now, as
     (subtitle, video, language), and records the others that need no sync
     in state. A subtitle is synced when it is new or changed, or when its
     video was replaced. Subtitles still changing, or whose video is missing
-    or still changing, are left for a later look."""
+    or still changing, are left for a later look. The language comes from the
+    name (langFn), else from the text (textLangFn(path) -> code or None)."""
     todo = []
     baseline = state.isNew and not existing
     known = { tuple(rec['fp']): path for path, rec in state.files.items() }
@@ -227,9 +229,12 @@ def plan(dirs, state, now, settle, existing, langFn):
         except OSError:
             continue
         lang = langFromName(os.path.basename(sub), os.path.basename(video), langFn)
+        if lang is None and textLangFn:
+            lang = textLangFn(sub)
         if lang is None:
             state.set(sub, fp, 'skipped', video=video, vfp=vfp,
-                      note='no language in the file name, such as Movie.en.srt')
+                      note='no language in the file name (such as Movie.en.srt), '
+                           'and none could be read from its text')
             continue
         todo.append((sub, video, lang))
     return todo
@@ -314,7 +319,7 @@ def cleanTemp(dirs):
 
 
 def watch(dirs, statePath, syncFn, langFn, interval=60, settle=120, existing=False,
-          once=False, log=print, sleep=time.sleep, clock=time.time):
+          once=False, log=print, sleep=time.sleep, clock=time.time, textLangFn=None):
     """Scans dirs every interval seconds and syncs subtitles that arrive, one
     at a time, until stopped (or after one pass with once)."""
     state = State(statePath)
@@ -323,7 +328,7 @@ def watch(dirs, statePath, syncFn, langFn, interval=60, settle=120, existing=Fal
             '(use --existing to sync them too)')
     cleanTemp(dirs)
     while True:
-        todo = plan(dirs, state, clock(), settle, existing, langFn)
+        todo = plan(dirs, state, clock(), settle, existing, langFn, textLangFn)
         state.save()
         for sub, video, lang in todo:
             log('[*] syncing {}'.format(sub))
@@ -392,6 +397,15 @@ def run(watchArgs, verbosity=1, offline=False):
         cli.pr.println(1, msg)
         logger.info(msg)
 
+    def textLangFn(path):
+        from subsync.synchro import textlang
+        from subsync.data import languages
+        res = textlang.detectFile(path)
+        if res:
+            log('[+] {}: no language in its name, read from its text: {}'.format(
+                path, languages.getName(res[0])))
+        return res[0] if res else None
+
     log('[+] watching {}'.format(', '.join(dirs)))
     log('[+] state file: {}'.format(statePath))
     try:
@@ -400,7 +414,7 @@ def run(watchArgs, verbosity=1, offline=False):
                      settle=watchArgs.get('settle') if watchArgs.get('settle') is not None else 120,
                      existing=watchArgs.get('existing', False),
                      once=watchArgs.get('once', False),
-                     log=log)
+                     log=log, textLangFn=textLangFn)
     except KeyboardInterrupt:
         log('[-] stopped')
         return 0

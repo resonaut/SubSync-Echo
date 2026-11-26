@@ -1,5 +1,6 @@
 import gizmo
 from subsync.synchro.channels import ChannelsMap
+from subsync.synchro import textlang
 from subsync.data import languages
 from subsync.translations import _
 from subsync import utils
@@ -47,6 +48,8 @@ class InputFile(object):
         self.streams = {}
         self.fps     = None
         self.lang    = None
+        self.langFromText = False   # lang was read from the subtitle text
+        self._langGiven = bool(languages.get(lang).code3)   # then the text isn't read
         self.enc     = None
         self.channels = ChannelsMap.auto()
         self.filetype = None
@@ -62,7 +65,8 @@ class InputFile(object):
 
         if streamByType or streamByLang:
             self.selectBy(type=streamByType, lang=streamByLang)
-        self.lang = languages.get(lang).code3 or self.lang
+        if languages.get(lang).code3:       # given by the user: it wins
+            self.lang, self.langFromText = languages.get(lang).code3, False
         self.enc = enc or self.enc
         self.fps = fps or self.fps
 
@@ -116,6 +120,14 @@ class InputFile(object):
 
         if not self.lang or self.lang.lower() == 'und':
             self.lang = getLangFromPath(self.path)
+
+        # neither the stream nor the file name says it: read it from the text
+        self.langFromText = False
+        if not self.lang and not getattr(self, '_langGiven', False) \
+                and self.type == 'subtitle/text' and textlang.isTextSubtitle(self.path):
+            res = textlang.detectFile(self.path)
+            if res:
+                self.lang, self.langFromText = res[0], True
 
         return stream
 

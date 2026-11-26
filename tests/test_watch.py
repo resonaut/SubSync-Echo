@@ -181,6 +181,20 @@ class WatchTest(unittest.TestCase):
         self.assertEqual(self.lib.synced, [])
         self.assertEqual(self.lib.status('Movie.srt'), 'skipped')
 
+    def test_language_read_from_the_text_when_the_name_has_none(self):
+        def textLangFn(path):
+            with open(path, encoding='utf-8') as fp:
+                return 'spa' if 'hola' in fp.read() else None
+        self.lib.add('Movie.mkv')
+        self.lib.run(textLangFn=textLangFn)
+        self.lib.add('Movie.srt', 'hola, ¿qué tal?')
+        self.lib.add('Movie.sdh.srt', '♪ ♪')
+        self.lib.add('Movie.en.srt', 'hola, a name wins over the text')
+        self.lib.run(textLangFn=textLangFn)
+        self.assertEqual(sorted(self.lib.synced), [ ('Movie.en.srt', 'eng'), ('Movie.srt', 'spa') ])
+        self.assertEqual(self.lib.status('Movie.srt'), 'synced')
+        self.assertEqual(self.lib.status('Movie.sdh.srt'), 'skipped', 'no language from name or text')
+
     def test_replaced_while_syncing_is_left_for_later(self):
         lib = self.lib
 
