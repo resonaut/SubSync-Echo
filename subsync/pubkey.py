@@ -24,8 +24,10 @@ def verify_crypto(hash, sig):
         with open(config.keypath, 'rb') as fp:
             _pubkey = RSA.importKey(fp.read())
 
+    # not an assert: Python leaves asserts out when run with -O
     verifier = PKCS1_v1_5.new(_pubkey)
-    assert( verifier.verify(hash, sig) )
+    if not verifier.verify(hash, sig):
+        raise ValueError('signature does not match')
 
 
 try:
