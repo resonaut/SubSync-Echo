@@ -6,7 +6,11 @@ only when every limit holds, on Windows and on Linux.
 
 Lines the answer key can't score are left out: a line shown for no time at
 all (a translator's credit at 0:00) and a line with another subtitle's number
-and timing inside its text (a broken block in the file).
+and timing inside its text (a broken block in the file). How many lines each
+language leaves out is pinned too, and a different number fails the test.
+
+The limits were set from the results of the code they first ran with, so
+they catch a result getting worse; they aren't an outside standard.
 
     sintel      Sintel (Blender Foundation, CC BY 3.0, 15 minutes): very little
                 dialogue (26 lines), much music; subtitles in Japanese, French,
@@ -56,6 +60,9 @@ FILMS = {
         # refusal passes, a saved file must be right
         'gates': { 'jp': ('min-or-none', 95), 'fr': ('min', 95), 'nl': ('all',),
                    'ru': ('min', 95), 'zh': ('min', 95), 'cz': ('all',) },
+        # lines left out as unscorable, pinned so a changed file or rule can't
+        # raise a score unnoticed: the Dutch broken block, the Czech credit
+        'unscored': { 'nl': 1, 'cz': 1 },
     },
     'tos-vfr': {
         'title': 'Tears of Steel, variable frame rate',
@@ -276,13 +283,19 @@ def main():
                     'avg': statistics.mean(map(abs, err)), 'bias': statistics.mean(err),
                     'worst': max(map(abs, err)) }
         passed, rule = judge(film['gates'][lang], res)
-        rows.append((lang, route, took, len(truth), len(truth) - len(scored), res, passed, rule))
+        skipped, expected = len(truth) - len(scored), film.get('unscored', {}).get(lang, 0)
+        if skipped != expected:
+            passed = False
+            rule += '; {} line(s) not scored, expected {}'.format(skipped, expected)
+        rows.append((lang, route, took, len(truth), skipped, res, passed, rule))
 
     table = [ '| Subtitles | Method | Time | Lines | Within 0.2 s | Average error | Bias | Worst | Limit | Result |',
               '|---|---|---|---|---|---|---|---|---|---|' ]
     for lang, route, took, n, skipped, res, passed, rule in rows:
         lines = '{}{}'.format(n, ', {} not scored'.format(skipped) if skipped else '')
         verdict = 'shown' if args.report_only else ('pass' if passed else '**FAIL**')
+        if res is None and passed and not args.report_only:
+            verdict = 'pass (refused)'       # allowed for this language, but shown as such
         if res is None:
             table.append('| {} | {} | {:.0f} s | {} | no file saved | | | | {} | {} |'.format(
                 lang, route, took, lines, rule, verdict))
