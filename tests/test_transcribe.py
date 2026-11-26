@@ -11,6 +11,7 @@ import random
 import os
 import tempfile
 import unittest
+from unittest import mock
 
 from synthetic import transcribe as t, makeSpeech, makeSubtitles, mistime, cut, times, reword
 
@@ -502,6 +503,31 @@ class SparseDialogueTest(unittest.TestCase):
     def test_too_few_lines_refused(self):
         subs, lines = self.film()
         self.assertIsNone(t.sparseFit(subs, lines[:2] + lines[-2:]))
+
+    def test_next_frame_rate_not_taken_by_chance(self):
+        # 25/24 and 25/23.976 differ by 0.1%, 0.3 s over these lines: with a
+        # weak translation pairing 8 lines, word times decided between them by
+        # chance (Sintel's Chinese subtitles on one computer: lines up to
+        # 0.34 s off). The 13 lines measured near the transcript decide now.
+        weak = { 3, 5, 9, 11, 19, 21 }
+        subs = [ (s, s + 2.5, 'qqxz vvkk' if no in weak else x)
+                 for no, (s, x) in enumerate(zip(self.STARTS, self.TEXTS)) ]
+        mistimed = mistime(subs, 25 / 24, 2.5)
+        oldWrong = 0
+        for seed in range(60):
+            rnd = random.Random(seed)
+            lines = []
+            for no in self.HEARD:
+                start = self.STARTS[no] - 0.35 + rnd.uniform(-0.15, 0.15)
+                lines.append((start, start + 2.0, self.TEXTS[no]))
+            with self.subTest(seed=seed):
+                res = t.sparseFit(mistimed, lines)
+                self.assertIsNotNone(res)
+                self.assertAlmostEqual(res[0], 25 / 24, places=6)
+            with mock.patch.object(t, 'sparseSpeed', lambda s, l, tied: tied[0]):
+                old = t.sparseFit(mistimed, lines)
+            oldWrong += abs(old[0] - 25 / 24) > 1e-6
+        self.assertGreater(oldWrong, 0, 'some of these films fooled the old choice')
 
     def test_lead_measured_from_speech(self):
         agree = [ (s, s - 0.35) for s in self.STARTS[:6] ]

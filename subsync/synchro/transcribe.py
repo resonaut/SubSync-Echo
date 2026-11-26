@@ -1535,12 +1535,16 @@ def sparseFit(subs, lines, minWordLen=None, ngrams=None):
         return None
 
     first, last = min(s[0] for s in subs), max(s[0] for s in subs)
-    for count2, _e, a2, b2, _agree in fits[1:]:
+    tied = [ (a, b, agree) ]
+    for count2, _e, a2, b2, agree2 in fits[1:]:
         if count2 < count:
             break
         if max(abs((a - a2) * t + b - b2) for t in (first, last)) > 2 * sparseTolerance:
             logger.info('sparse dialogue: %.6fx%+.3f fits as many lines, no clear answer', a2, b2)
             return None
+        if all(a2 != t[0] for t in tied):
+            tied.append((a2, b2, agree2))
+    a, b, agree = sparseSpeed(subs, lines, tied)
 
     # the pairs left out must not agree among themselves on another offset:
     # that's what subtitles of a different cut look like, the lines after a
@@ -1556,11 +1560,10 @@ def sparseFit(subs, lines, minWordLen=None, ngrams=None):
     return sparseRefine(subs, lines, a, b, agree)
 
 
-def sparseRefine(subs, lines, a, b, agree):
-    """Offset measured on every subtitle line with exactly one transcript
-    line starting within `sparseTolerance` of where the formula puts it (the
-    next one at least `leadClear` farther), when there are at least
-    `sparseMinLines`; otherwise the result of `sparseFit` is kept."""
+def _sparseNear(subs, lines, a, b):
+    """(subtitle start, transcript start) for every subtitle line with exactly
+    one transcript line starting within `sparseTolerance` of where the formula
+    puts it (the next one at least `leadClear` farther)."""
     starts = sorted(l[0] for l in lines)
     near = []
     for s in subs:
@@ -1568,6 +1571,46 @@ def sparseRefine(subs, lines, a, b, agree):
         found = sorted((abs(w - at), w) for w in starts if abs(w - at) <= sparseTolerance)
         if found and (len(found) == 1 or found[1][0] - found[0][0] >= leadClear):
             near.append((s[0], found[0][1]))
+    return near
+
+
+def sparseSpeed(subs, lines, tied):
+    """Choice between frame-rate speeds that fit the same number of paired
+    lines and stay within 2 * `sparseTolerance` of each other over the film,
+    tied: list of (a, b, agree), best paired fit first.
+
+    Speeds next to each other differ by 0.1% (25/24 and 25/23.976), 0.3 s over
+    Sintel's 5 minutes of lines, so a few paired lines can fit both, and
+    Whisper's word times decide between them by chance (Sintel's Chinese
+    subtitles got the wrong one on one computer, lines up to 0.34 s off). The
+    speed is measured on every line `sparseRefine` uses, more than the paired
+    ones, by a straight-line fit, and the tied speed closest to it is kept.
+    With fewer than `sparseMinLines` such lines the best paired fit is kept.
+    """
+    if len(tied) < 2:
+        return tied[0]
+    a, b, _agree = tied[0]
+    near = _sparseNear(subs, lines, a, b)
+    if len(near) < sparseMinLines:
+        return tied[0]
+    ms = sum(s for s, _w in near) / len(near)
+    mw = sum(w for _s, w in near) / len(near)
+    var = sum((s - ms) ** 2 for s, _w in near)
+    if var <= 0:
+        return tied[0]
+    slope = sum((s - ms) * (w - mw) for s, w in near) / var
+    best = min(tied, key=lambda t: abs(t[0] - slope))
+    if best[0] != a:
+        logger.info('sparse dialogue: %i lines measure speed %.6f, so %.6fx rather than %.6fx',
+                len(near), slope, best[0], a)
+    return best
+
+
+def sparseRefine(subs, lines, a, b, agree):
+    """Offset measured on every subtitle line with exactly one transcript
+    line near where the formula puts it (see `_sparseNear`), when there are at
+    least `sparseMinLines`; otherwise the result of `sparseFit` is kept."""
+    near = _sparseNear(subs, lines, a, b)
     if len(near) < sparseMinLines:
         return a, b, agree
     refined = _median([ w - a * s for s, w in near ])
