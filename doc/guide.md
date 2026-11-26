@@ -40,7 +40,7 @@ To check that a download wasn't changed, compare its checksum with the `SHA256SU
 
 ## Using it
 
-1. **Subtitles:** choose your subtitle file and set its language, for example **English**.
+1. **Subtitles:** choose your subtitle file and check its language, for example **English**. SubSync fills it in from the file name (`Movie.en.srt`), or, when the name doesn't say, from the text itself; if it stays empty, choose it.
 2. **References:** choose the video file. If its language box stays empty, leave it: SubSync detects the spoken language when you click Start (about 5–15 seconds).
 3. Click **Start**. The first time only, agree to download the speech model (about 490 MB), and for subtitles that aren't in English, the translation model (about 490 MB).
 4. When it says **Subtitles synchronized**, click **Save**.
