@@ -1,11 +1,11 @@
 # <img src="resources/subsync.svg" width="44" height="44" alt="" align="top"> SubSync Echo
 
 [![Build](https://github.com/resonaut/SubSync-Echo/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/resonaut/SubSync-Echo/actions/workflows/build.yml)
-[![Latest release](https://img.shields.io/github/v/release/resonaut/SubSync-Echo?label=release)](https://github.com/resonaut/SubSync-Echo/releases/latest)
-[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
-![Platforms: Windows and Linux](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux-0078D6)
-![Python 3.12](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)
-![Runs offline on the CPU](https://img.shields.io/badge/runs-offline%20%C2%B7%20CPU%20only-2EA44F)
+[![Latest release](https://img.shields.io/github/v/release/resonaut/SubSync-Echo?label=Release)](https://github.com/resonaut/SubSync-Echo/releases/latest)
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue)](LICENSE)
+![Platforms: Windows and Linux](https://img.shields.io/badge/Platforms-Windows%20%7C%20Linux-0078D6)
+![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![Runs offline on the CPU](https://img.shields.io/badge/Runs-Offline%20%C2%B7%20CPU%20only-2EA44F)
 
 **Subtitles out of sync with your video? SubSync Echo fixes them for you.** It listens to what is said in the film and moves every subtitle line to the moment it's spoken. It works with anime and other Japanese films, and with subtitles in a different language from the audio. Everything runs on your own computer, with no graphics card, and nothing is uploaded.
 
