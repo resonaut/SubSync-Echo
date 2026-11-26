@@ -317,7 +317,7 @@ jobs:
           path: e2e-data/sita
           key: e2e-sita-${{ runner.os }}-v2
 
-      # report-only films: Sintel (674 MB) and a variable frame rate copy of
+      # Sintel (674 MB) and a variable frame rate copy of
       # Tears of Steel, made with PyAV
       - uses: actions/cache@v4
         with:
@@ -386,7 +386,7 @@ jobs:
           path: e2e-data/sita
           key: e2e-sita-${{ runner.os }}-v2
 
-      # report-only films: Sintel (674 MB) and a variable frame rate copy of
+      # Sintel (674 MB) and a variable frame rate copy of
       # Tears of Steel, made with PyAV
       - uses: actions/cache@v4
         with:

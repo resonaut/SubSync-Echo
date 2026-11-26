@@ -66,7 +66,7 @@ The columns of the tables:
 | `python tests/run_all.py all` | the unit tests and both films |
 | `python tests/run_all.py e2e --films tos` | only Tears of Steel, the quicker film (372 MB) |
 | `python tests/run_all.py e2e --films watch` | watch mode for home servers: a small library made of Tears of Steel, with `watch --once` run after each change (see below) |
-| `python tests/run_all.py e2e --films all` | also watch mode and the report-only films below (674 MB more, and PyAV: `pip install av`) |
+| `python tests/run_all.py e2e --films all` | also watch mode and the two films below (674 MB more, and PyAV: `pip install av`), as the release builds run them |
 | `python tests/run_all.py e2e --release 0.20` | test an older release |
 | `python tests/run_all.py e2e --app dist/subsync/subsync-cmd.exe` | test the app you built |
 | `python tests/run_all.py e2e --app "python run.py"` | test the app run from source |
@@ -76,12 +76,12 @@ The start of a unit test run says which optional parts it found: with PyAV, fast
 
 **Watch mode** (`--films watch`) makes a small media library with a copy of Tears of Steel and runs `subsync-cmd --cli watch --once` four times: on the first start with only the video there (nothing is synced); after its Spanish subtitles arrive, mistimed (they are synced in place, every line within 0.2 s, the original kept as `.orig`, and a subtitle without a language in its name left alone); once more (nothing is synced again); and after the video is replaced (synced again from the kept original). It fails the run if any step doesn't do that, and GitHub Actions runs it before every release.
 
-**Report-only films** show their results as REPORT but never fail a run or a release, until they've run on both systems for a while. GitHub Actions runs them before every release too.
+**Two more films** gate releases from 0.21, like Tears of Steel and Sita: a release is published only when every language meets its limit, on Windows and on Linux. Lines the answer key can't score are left out and listed as "not scored": a line shown for no time at all (the Czech file's translator credit at 0:00) and a line with another subtitle's number and timing inside its text (a broken block in the Dutch file). How many lines each language leaves out is pinned (Dutch 1, Czech 1, the others none), so a changed file or rule fails the test instead of raising a score unnoticed. Japanese may be refused (shown as "pass (refused)"), since it has never synced yet. The limits were set from the results of the code they first ran with: they catch a result getting worse, they aren't an outside standard. `more_films.py --report-only` shows the results without judging them.
 
-| Film | What it tests | Result now |
-|---|---|---|
-| **Tears of Steel, variable frame rate** (`--films tos-vfr`) | the film converted on your computer so its frame rate changes every few seconds (24, 12 and 16 frames per second), as in phone and screen recordings; English and Spanish subtitles. SubSync times `.srt` subtitles by the audio, so this checks that it reads such a file correctly. | both languages: every line within 0.2 s |
-| **[Sintel](https://durian.blender.org)** (Blender Foundation, CC BY 3.0, 15 minutes; `--films sintel`) | very little dialogue (26 lines) and much music; its official Japanese, French, Dutch, Russian, Chinese and Czech subtitles on the English audio, mistimed as 25 fps on the 24 fps film plus 2.5 s | French, Russian and Chinese: every line within 0.2 s; Dutch and Czech: every spoken line (the other line is broken in the Dutch file, a translator credit in the Czech one); Japanese: no file saved. Whisper hears only 14 short lines in the whole film, so SubSync times them by their words (see the CHANGELOG) |
+| Film | What it tests | Limit | Result now |
+|---|---|---|---|
+| **Tears of Steel, variable frame rate** (`--films tos-vfr`) | the film converted on your computer so its frame rate changes every few seconds (24, 12 and 16 frames per second), as in phone and screen recordings; English and Spanish subtitles. SubSync times `.srt` subtitles by the audio, so this checks that it reads such a file correctly. | each language: at least 95% within 0.2 s | both languages: every line within 0.2 s |
+| **[Sintel](https://durian.blender.org)** (Blender Foundation, CC BY 3.0, 15 minutes; `--films sintel`) | very little dialogue (26 lines) and much music; its official Japanese, French, Dutch, Russian, Chinese and Czech subtitles on the English audio, mistimed as 25 fps on the 24 fps film plus 2.5 s | French, Russian, Chinese: at least 95% within 0.2 s; Dutch, Czech: every scored line; Japanese: no file, or at least 95% (a wrong file fails) | French, Russian and Chinese: every line within 0.2 s; Dutch and Czech: every spoken line (the other line is broken in the Dutch file, a translator credit in the Czech one); Japanese: no file saved. Whisper hears only 14 short lines in the whole film, so SubSync times them by their words (see the CHANGELOG) |
 
 ## Building
 
