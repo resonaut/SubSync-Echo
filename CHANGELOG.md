@@ -26,6 +26,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Add
 
 ### Security
 - Downloaded asset archives (the original method's speech models and dictionaries) are refused as a whole when any file in them would be written outside the asset folder. These archives were already signature-checked, and Python's zip extraction already drops `..` from paths; this is a second safeguard.
+- The signature check of those archives no longer depends on a Python `assert` when pycryptodome is installed: Python skips asserts when run with `-O`, which would have let any signature pass. The release builds use the `cryptography` library, which wasn't affected. A signature that can't be downloaded is now reported as such ("Couldn't download asset signature") instead of as "Signature verification failed", and both errors give the reason. New unit tests cover the downloader's failure paths and check signatures with a real RSA key, also with `-O`.
 - `SECURITY.md` says how to report a security problem privately, which versions get fixes, and how each download is checked.
 - Release pages list a `SHA256SUMS` file with the checksum of every download.
 

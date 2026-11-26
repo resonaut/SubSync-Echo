@@ -161,11 +161,23 @@ class AssetDownloader(object):
                 hash = self._download(fp, url, remote.get('size'), timeout)
 
                 if not self._terminated:
+                    # a signature that can't be downloaded and one that doesn't
+                    # match are different problems: say which one it was
                     try:
-                        self._verify(fp, remote.get('sig'), hash)
-                    except:
+                        signature = self._downloadSignature(remote.get('sig'))
+                    except requests.RequestException as e:
+                        raise Error(_("Couldn't download asset signature"),
+                                asset=self._asset.getId(), url=remote.get('sig'),
+                                reason=str(e)) from e
+
+                if not self._terminated:
+                    try:
+                        logger.info('verifying signature')
+                        pubkey.verify(hash, signature)
+                    except Exception as e:
                         raise Error(_('Signature verification failed'),
-                                asset=self._asset.getId(), url=url)
+                                asset=self._asset.getId(), url=url,
+                                reason=repr(e)) from e
 
                 if not self._terminated:
                     try:
@@ -195,7 +207,7 @@ class AssetDownloader(object):
         r.raise_for_status()
         try:
             size = int(r.headers.get('content-length', size))
-        except:
+        except (TypeError, ValueError):
             size = None
         pos = 0
 
@@ -226,16 +238,11 @@ class AssetDownloader(object):
             for onUpdate in self._onUpdate:
                 onUpdate(self._asset, pos, size)
 
-    def _verify(self, fp, sig, hash):
-            logger.info('downloading signature')
-            r = requests.get(sig, timeout=5)
-            r.raise_for_status()
-            signature = r.content
-            if self._terminated:
-                return
-
-            logger.info('verifying signature')
-            pubkey.verify(hash, signature)
+    def _downloadSignature(self, sig):
+        logger.info('downloading signature')
+        r = requests.get(sig, timeout=5)
+        r.raise_for_status()
+        return r.content
 
     def _install(self, fp, type):
         with self._asset._lock:
