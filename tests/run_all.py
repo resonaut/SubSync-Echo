@@ -26,9 +26,10 @@ options:
     --app PATH       test this app instead of the latest release, e.g.
                      dist/subsync/subsync-cmd.exe, or "python run.py"
     --release TAG    test this release instead of the latest, e.g. 0.20
-    --films LIST     tos, sita (the default, these two gate releases), watch
-                     (watch mode on Tears of Steel, also gates releases), and
-                     the report-only films sintel and tos-vfr; all = all of them
+    --films LIST     tos, sita (the default), watch (watch mode on Tears of
+                     Steel), sintel (very little dialogue) and tos-vfr (Tears
+                     of Steel at a variable frame rate); all = all of them, as
+                     the release builds run them. Every one gates releases.
     --data DIR       downloads and results (default e2e-data)
     --install        first install the unit tests' packages, at the versions
                      the release builds use (.github/constraints.txt)
@@ -59,8 +60,9 @@ REPO = 'resonaut/SubSync-Echo'
 FILMS = {
     'tos': ('Tears of Steel', 'tests/e2e/tears_of_steel.py', 'tears-of-steel', False),
     'sita': ('Sita Sings the Blues', 'tests/e2e/sita_sings_the_blues.py', 'sita', False),
-    'sintel': ('Sintel', 'tests/e2e/more_films.py', 'sintel', True),
-    'tos-vfr': ('Tears of Steel, VFR', 'tests/e2e/more_films.py', 'tears-of-steel-vfr', True),
+    # judged since 0.21: little dialogue (Sintel) and a variable frame rate
+    'sintel': ('Sintel', 'tests/e2e/more_films.py', 'sintel', False),
+    'tos-vfr': ('Tears of Steel, VFR', 'tests/e2e/more_films.py', 'tears-of-steel-vfr', False),
     # watch mode on a small library made of Tears of Steel (judged)
     'watch': ('Watch mode', 'tests/e2e/watch_mode.py', 'tears-of-steel', False),
 }

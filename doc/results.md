@@ -48,7 +48,7 @@ The speech detector counted about a quarter of the singing as speech; it didn't 
 
 Before the speech check, one of these films (Cars) had only 65% of lines within 0.2 s, because the original method stops listening once its answer looks good enough. Two more films were left out: their subtitle files don't match these copies of the films (one is 1.85 s early throughout, the other made for another frame rate).
 
-**Report-only tests** (from 0.21), shown but not yet judged:
+**Two more end-to-end tests** (from 0.21), also run before every release on Windows and Linux; a release is published only when they meet their limits ([development.md](development.md#more-test-options) lists them):
 
 | Test | Result |
 |---|---|

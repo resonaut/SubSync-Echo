@@ -140,4 +140,4 @@ Run `subsync-cmd.exe --help` for all options.
 
 **Home server** (from 0.21): sync subtitles automatically as they arrive, with watch mode or from Bazarr; see [home-server.md](home-server.md).
 
-**Building from source and running the tests:** see [development.md](development.md). Unit tests run on every build; two end-to-end tests on free films run on both packages before every release, and a release is published only when they pass.
+**Building from source and running the tests:** see [development.md](development.md). Unit tests run on every build; end-to-end tests on four free test cases (Tears of Steel, also at a variable frame rate, Sita Sings the Blues and Sintel) and on watch mode run on both packages before every release, and a release is published only when they pass.

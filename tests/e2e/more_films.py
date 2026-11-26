@@ -1,8 +1,12 @@
 """More end-to-end tests anyone can rerun, on free films. Like the Tears of
 Steel and Sita Sings the Blues tests, each takes a film's own subtitles as the
 answer key, mistimes a copy by a known error, syncs it with SubSync and scores
-every line. These are report-only for now: they show their results but don't
-fail a release until they have run on both systems for a while.
+every line. Each language has a limit (GATES below); a release is published
+only when every limit holds, on Windows and on Linux.
+
+Lines the answer key can't score are left out: a line shown for no time at
+all (a translator's credit at 0:00) and a line with another subtitle's number
+and timing inside its text (a broken block in the file).
 
     sintel      Sintel (Blender Foundation, CC BY 3.0, 15 minutes): very little
                 dialogue (26 lines), much music; subtitles in Japanese, French,
@@ -15,10 +19,11 @@ fail a release until they have run on both systems for a while.
 
 usage:
     python tests/e2e/more_films.py --film sintel --app dist/subsync/subsync-cmd.exe --data DIR
-        [--work DIR] [--download]
+        [--work DIR] [--download] [--report-only]
 
-Writes a Markdown table to $GITHUB_STEP_SUMMARY when set. Exit code 2 when
-something couldn't be prepared (a download or the conversion failed).
+Writes a Markdown table to $GITHUB_STEP_SUMMARY when set. Exit code 1 when a
+limit isn't met (not with --report-only), 2 when something couldn't be
+prepared (a download or the conversion failed).
 """
 
 import argparse
@@ -32,7 +37,7 @@ import urllib.request
 import zipfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from tears_of_steel import readSrt, writeSrt, compare     # noqa: E402
+from tears_of_steel import readSrt, writeSrt              # noqa: E402
 import tears_of_steel as tos                               # noqa: E402
 
 FILMS = {
@@ -47,6 +52,10 @@ FILMS = {
         # subtitles made for 25 fps shown on the 24 fps film, 2.5 s late
         'speed': 25 / 24, 'offset': 2.5,
         'about': 'Official subtitles mistimed as 25 fps on the 24 fps film plus 2.5 s.',
+        # Japanese is refused for now (its translation pairs too few lines): a
+        # refusal passes, a saved file must be right
+        'gates': { 'jp': ('min-or-none', 95), 'fr': ('min', 95), 'nl': ('all',),
+                   'ru': ('min', 95), 'zh': ('min', 95), 'cz': ('all',) },
     },
     'tos-vfr': {
         'title': 'Tears of Steel, variable frame rate',
@@ -58,8 +67,43 @@ FILMS = {
         'speed': tos.SPEED, 'offset': tos.OFFSET,
         'about': 'Tears of Steel converted to a variable frame rate; official subtitles '
                  'mistimed as 25 fps on the 23.976 fps film plus 2.5 s.',
+        'gates': { 'en': ('min', 95), 'es': ('min', 95) },
     },
 }
+
+
+def unscorable(start, end, text):
+    """A line the answer key can't score: shown for no time at all, or with
+    another subtitle's timing inside its text (a broken block)."""
+    return end <= start or re.search(r'\d+:\d\d:\d\d[,.]\d+ --> ', text) is not None
+
+
+def pairLines(truth, synced):
+    """(index in truth, start time error) for each answer-key line found in
+    the result. SubSync changes only timing, so lines are paired by text, in
+    order (as tears_of_steel.compare does)."""
+    import difflib
+    key = lambda text: ' '.join(text.split())
+    matcher = difflib.SequenceMatcher(None, [ key(t) for _, _, t in truth ],
+            [ key(t) for _, _, t in synced ], autojunk=False)
+    pairs = []
+    for block in matcher.get_matching_blocks():
+        for k in range(block.size):
+            pairs.append((block.a + k, synced[block.b + k][0] - truth[block.a + k][0]))
+    return pairs
+
+
+def judge(gate, res):
+    """(passed, rule) for one language; res is None when no file was saved."""
+    kind = gate[0]
+    if kind == 'all':
+        rule = 'every scored line within 0.2 s'
+        return res is not None and res['within'] >= 100, rule
+    rule = 'at least {}% within 0.2 s'.format(gate[1])
+    if kind == 'min-or-none':
+        rule = 'no file, or ' + rule
+        return res is None or res['within'] >= gate[1], rule
+    return res is not None and res['within'] >= gate[1], rule
 
 
 def fetch(url, path):
@@ -186,6 +230,7 @@ def main():
     parser.add_argument('--data', required=True, help='folder with the film and its subtitles')
     parser.add_argument('--work', default='e2e-more', help='folder for mistimed copies and results')
     parser.add_argument('--download', action='store_true', help='download (or make) missing files first')
+    parser.add_argument('--report-only', action='store_true', help="show the results, don't judge them")
     args = parser.parse_args()
     film = FILMS[args.film]
 
@@ -221,34 +266,40 @@ def main():
 
         logText = open(log, encoding='utf-8', errors='replace').read() if os.path.exists(log) else ''
         route = ', then '.join(re.findall(r'matching route: (\w+)', logText)) or 'original'
-        if not os.path.exists(out):
-            rows.append((lang, route, took, len(truth), None))
-            continue
-        err, missing = compare(truth, readSrt(out))
-        if not err:
-            err = [ float('inf') ]
-        within = 100 * sum(abs(e) <= 0.2 for e in err) / len(truth)
-        rows.append((lang, route, took, len(truth), (missing, within,
-            statistics.mean(map(abs, err)), statistics.mean(err), max(map(abs, err)))))
+        scored = [ i for i, (s, e, x) in enumerate(truth) if not unscorable(s, e, x) ]
+        res = None
+        if os.path.exists(out):
+            errs = dict(pairLines(truth, readSrt(out)))
+            err = [ errs[i] for i in scored if i in errs ] or [ float('inf') ]
+            res = { 'missing': sum(i not in errs for i in scored),
+                    'within': 100 * sum(abs(errs[i]) <= 0.2 for i in scored if i in errs) / len(scored),
+                    'avg': statistics.mean(map(abs, err)), 'bias': statistics.mean(err),
+                    'worst': max(map(abs, err)) }
+        passed, rule = judge(film['gates'][lang], res)
+        rows.append((lang, route, took, len(truth), len(truth) - len(scored), res, passed, rule))
 
-    table = [ '| Subtitles | Method | Time | Lines | Within 0.2 s | Average error | Bias | Worst |',
-              '|---|---|---|---|---|---|---|---|' ]
-    for lang, route, took, n, res in rows:
+    table = [ '| Subtitles | Method | Time | Lines | Within 0.2 s | Average error | Bias | Worst | Limit | Result |',
+              '|---|---|---|---|---|---|---|---|---|---|' ]
+    for lang, route, took, n, skipped, res, passed, rule in rows:
+        lines = '{}{}'.format(n, ', {} not scored'.format(skipped) if skipped else '')
+        verdict = 'shown' if args.report_only else ('pass' if passed else '**FAIL**')
         if res is None:
-            table.append('| {} | {} | {:.0f} s | {} | no file saved | | | |'.format(lang, route, took, n))
+            table.append('| {} | {} | {:.0f} s | {} | no file saved | | | | {} | {} |'.format(
+                lang, route, took, lines, rule, verdict))
         else:
-            missing, within, avg, bias, worst = res
-            lines = '{}{}'.format(n, ', {} missing'.format(missing) if missing else '')
-            table.append('| {} | {} | {:.0f} s | {} | {:.1f}% | {:.3f} s | {:+.3f} s | {:.2f} s |'.format(
-                lang, route, took, lines, within, avg, bias, worst))
-    report = '\n'.join([ '### {}, end to end (report only)'.format(film['title']), '',
+            if res['missing']:
+                lines += ', {} missing'.format(res['missing'])
+            table.append('| {} | {} | {:.0f} s | {} | {:.1f}% | {:.3f} s | {:+.3f} s | {:.2f} s | {} | {} |'.format(
+                lang, route, took, lines, res['within'], res['avg'], res['bias'], res['worst'], rule, verdict))
+    failed = not args.report_only and not all(passed for *_, passed, _ in rows)
+    report = '\n'.join([ '### {}, end to end{}'.format(film['title'], ' (report only)' if args.report_only else ''), '',
         film['about'] + ' Synced by SubSync and scored against the file\'s own timing.', '' ] + table)
     print(report)
     summary = os.environ.get('GITHUB_STEP_SUMMARY')
     if summary:
         with open(summary, 'a', encoding='utf-8') as fp:
             fp.write(report + '\n')
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == '__main__':
