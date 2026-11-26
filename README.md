@@ -1,6 +1,6 @@
 # <img src="resources/subsync.svg" width="44" height="44" alt="" align="top"> SubSync Echo
 
-[![Build](https://img.shields.io/github/actions/workflow/status/resonaut/SubSync-Echo/build.yml?branch=master&label=build)](https://github.com/resonaut/SubSync-Echo/actions/workflows/build.yml)
+[![Build](https://github.com/resonaut/SubSync-Echo/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/resonaut/SubSync-Echo/actions/workflows/build.yml)
 [![Latest release](https://img.shields.io/github/v/release/resonaut/SubSync-Echo?label=release)](https://github.com/resonaut/SubSync-Echo/releases/latest)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 ![Platforms: Windows and Linux](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux-0078D6)
