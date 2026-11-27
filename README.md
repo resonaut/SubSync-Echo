@@ -18,7 +18,7 @@
 ## Quick start
 
 1. **Download** `subsync-<version>-portable-amd64.exe` from [Releases](https://github.com/resonaut/SubSync-Echo/releases/latest), run it to unpack, and open **`subsync.exe`** in the new `subsync` folder. On Linux, unpack the `.tar.xz` and run `./subsync/subsync` ([details](doc/guide.md#installing)).
-2. **Choose your subtitles and your video,** set the language of the subtitles, and click **Start**.
+2. **Choose your subtitles and your video,** check the language of the subtitles (filled in from the file name or the text), and click **Start**.
 3. When it says **Subtitles synchronized**, click **Save**.
 
 The first time, SubSync downloads its speech model once (about 490 MB). After that it works offline.

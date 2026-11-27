@@ -4,10 +4,11 @@ runs the real app once (--once), like a scheduled task would:
 
     1. first start, only the video there: nothing is synced
     2. subtitles arrive: Movie.es.srt is synced in place and its original
-       kept as .orig; Movie.srt (no language in its name) is left alone
+       kept as .orig; so is Movie.srt, whose name has no language, by the
+       language of its text; Movie.sdh.srt, only music notes, is left alone
     3. another look: nothing is synced again
     4. the video is replaced (here: its time changes, as when a new release
-       is copied in): the subtitle is synced again from the kept original
+       is copied in): both subtitles are synced again from their originals
 
 The synced subtitles are scored like the Tears of Steel test. The library is
 made in --work, with a copy of the film (the film in --data isn't touched).
@@ -77,7 +78,8 @@ def main():
 
     video = os.path.join(folder, NAME + '.mov')
     sub = os.path.join(folder, '{}.{}.srt'.format(NAME, LANG))
-    noLang = os.path.join(folder, NAME + '.srt')
+    noLang = os.path.join(folder, NAME + '.srt')          # language from its text
+    unknown = os.path.join(folder, NAME + '.sdh.srt')     # no language anywhere
     truth = tos.readSrt(os.path.join(args.data, 'TOS-{}.srt'.format(LANG)))
     mistimed = [ ((s - tos.OFFSET) / tos.SPEED, (e - tos.OFFSET) / tos.SPEED, x) for s, e, x in truth ]
 
@@ -137,32 +139,38 @@ def main():
     # 2. subtitles arrive (an hour old, so settled)
     tos.writeSrt(sub, mistimed)
     tos.writeSrt(noLang, mistimed)
-    original = read(sub)
-    for path in (sub, noLang):
+    tos.writeSrt(unknown, [ (s, e, '\u266a \u266a') for s, e, _x in mistimed ])
+    original, notes = read(sub), read(unknown)
+    for path in (sub, noLang, unknown):
         age(path, 3600)
     took, count = run()
-    res = score(sub)
-    kept = os.path.exists(sub + '.orig') and read(sub + '.orig') == original
-    ok = count == 1 and res[0] >= MIN_WITHIN and kept and status(sub) == 'synced' \
-        and read(noLang) == original and status(noLang) == 'skipped'
-    check('subtitles arrive', took, ok, '{}: {}; original kept: {}; {}: {}'.format(
-        os.path.basename(sub), scoreText(res), kept, os.path.basename(noLang), status(noLang)))
+    res, resText = score(sub), score(noLang)
+    kept = all(os.path.exists(p + '.orig') and read(p + '.orig') == original for p in (sub, noLang))
+    ok = count == 2 and res[0] >= MIN_WITHIN and resText[0] >= MIN_WITHIN and kept \
+        and status(sub) == 'synced' and status(noLang) == 'synced' \
+        and read(unknown) == notes and status(unknown) == 'skipped'
+    check('subtitles arrive', took, ok, '{}: {}; {} (language from its text): {}; originals kept: {}; '
+          '{}: {}'.format(os.path.basename(sub), scoreText(res), os.path.basename(noLang),
+                          scoreText(resText), kept, os.path.basename(unknown), status(unknown)))
 
     # 3. another look: nothing to do
-    before = (os.stat(sub).st_mtime_ns, os.stat(sub + '.orig').st_mtime_ns)
+    def times():
+        return [ os.stat(p).st_mtime_ns for p in (sub, sub + '.orig', noLang, noLang + '.orig', unknown) ]
+    before = times()
     took, count = run()
-    after = (os.stat(sub).st_mtime_ns, os.stat(sub + '.orig').st_mtime_ns)
+    after = times()
     check('another look', took, count == 0 and before == after,
           'subtitles synced: {}; files unchanged: {}'.format(count, before == after))
 
     # 4. the video is replaced: synced again from the kept original
     age(video, 1800)
     took, count = run()
-    res = score(sub)
-    kept = read(sub + '.orig') == original
-    ok = count == 1 and res[0] >= MIN_WITHIN and kept and status(sub) == 'synced'
-    check('video replaced', took, ok, 'subtitles synced: {}; {}; original kept: {}'.format(
-        count, scoreText(res), kept))
+    res, resText = score(sub), score(noLang)
+    kept = all(read(p + '.orig') == original for p in (sub, noLang))
+    ok = count == 2 and res[0] >= MIN_WITHIN and resText[0] >= MIN_WITHIN and kept \
+        and status(sub) == 'synced' and status(noLang) == 'synced'
+    check('video replaced', took, ok, 'subtitles synced: {}; {}; {}; originals kept: {}'.format(
+        count, scoreText(res), scoreText(resText), kept))
 
     os.remove(video)        # the copy of the film isn't needed any more
     table = [ '| Step | Time | Result | Detail |', '|---|---|---|---|' ]
@@ -170,7 +178,8 @@ def main():
         table.append('| {} | {:.0f} s | {} | {} |'.format(step, took, 'pass' if ok else '**fail**', detail))
     report = '\n'.join([ '### Watch mode, end to end', '',
         'A media library with Tears of Steel and its Spanish subtitles mistimed as 25 fps on the '
-        '23.976 fps film plus 2.5 s; `subsync-cmd --cli watch --once` run after each change.', '' ] + table)
+        '23.976 fps film plus 2.5 s, named with and without a language; `subsync-cmd --cli '
+        'watch --once` run after each change.', '' ] + table)
     print(report)
     summary = os.environ.get('GITHUB_STEP_SUMMARY')
     if summary:

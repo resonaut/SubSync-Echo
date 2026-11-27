@@ -27,7 +27,7 @@ What it does:
   ```
 
 - It waits until a subtitle and its video have not changed for 2 minutes, so files still being downloaded are left alone.
-- The subtitle language comes from the file name (`.en.`, `.eng.`, `.fra.`, also with `forced`, `sdh`, `cc` or `hi` after it). The audio language is detected. A subtitle without a language in its name is skipped.
+- The subtitle language comes from the file name (`.en.`, `.eng.`, `.fra.`, also with `forced`, `sdh`, `cc` or `hi` after it). When the name has none (`Movie.srt`), it is read from the subtitle text, if that's clear; otherwise the subtitle is skipped. The audio language is detected.
 - It syncs one subtitle at a time. The result replaces the subtitle, so your media server shows the synced one with no setup, and the original is kept next to it as `.orig`, a name media servers ignore. To undo, rename the `.orig` file back.
 - When a subtitle can't be synced (for example a film with very little speech), the file is left as it was and tried again only when it changes, for instance when a new one is downloaded.
 - When it can't run at all because the models it needs couldn't be downloaded (no internet yet), it tries again an hour later.

@@ -2,7 +2,7 @@ from subsync.synchro import SyncController
 from subsync.assets import assetManager
 from subsync.settings import settings
 from subsync import validator, utils, error
-from subsync.synchro import transcribe, translate, langdetect, route
+from subsync.synchro import transcribe, translate, langdetect, route, textlang
 from subsync.data import languages
 import time
 import threading
@@ -40,6 +40,24 @@ class Printer(object):
 
 
 pr = Printer()
+
+
+def reportSubLanguages(tasks):
+    """Says when a subtitle language was read from the text, and warns when
+    the text clearly reads as another language than the one given (by
+    --sub-lang or the file name), which is kept."""
+    for task in tasks:
+        sub = task.sub
+        if not sub or not sub.path:
+            continue
+        if sub.langFromText:
+            pr.println(1, '[+] subtitle language read from its text: {}'.format(
+                languages.getName(sub.lang)))
+        elif sub.lang and textlang.isTextSubtitle(sub.path):
+            res = textlang.detectFile(sub.path)
+            if res and not textlang.sameLanguage(res[0], sub.lang):
+                pr.println(0, '[!] the subtitles read like {}, not {}; if that is wrong, set --sub-lang'
+                        .format(languages.getName(res[0]), languages.getName(sub.lang)))
 
 
 def needsSpeechModel(tasks):
@@ -231,6 +249,7 @@ class App(object):
         sync = None
 
         try:
+            reportSubLanguages(tasks)
             if self.assetsDownloader.detectLanguages(tasks) is False:
                 self.assetsMissing = True
             validator.validateTasks(tasks, outputRequired=True)
